@@ -5,6 +5,10 @@ abstract interface class _KacheResourceBase {
 
   Future<void> revalidateAfterClear();
 
+  Future<void> revalidateOnResume();
+
+  Future<void> refreshActive();
+
   void dispose();
 }
 
@@ -13,9 +17,10 @@ final class KacheResource<T> implements _KacheResourceBase {
   KacheResource._({
     required KacheClient client,
     required _KacheEntry<T> entry,
-    required this.query,
+    required KacheQuery<T> query,
   }) : _client = client,
-       _entry = entry {
+       _entry = entry,
+       _query = query {
     _entry.addReference(query.policy.gcAfter);
     _entrySubscription = _entry.changes.listen(
       _updates.add,
@@ -39,8 +44,10 @@ final class KacheResource<T> implements _KacheResourceBase {
   final KacheClient _client;
   final _KacheEntry<T> _entry;
 
-  /// The immutable declaration owned by this handle.
-  final KacheQuery<T> query;
+  KacheQuery<T> _query;
+
+  /// The immutable declaration currently used by this handle.
+  KacheQuery<T> get query => _query;
 
   @override
   KacheKey get key => query.key;
@@ -75,6 +82,13 @@ final class KacheResource<T> implements _KacheResourceBase {
   Future<KacheSnapshot<T>> refresh() {
     _ensureActive();
     return _entry.refresh(query);
+  }
+
+  /// Replaces this handle's same-key fetcher and policy without loading.
+  void updateQuery(KacheQuery<T> query) {
+    _ensureActive();
+    _client._rebind(_entry, query);
+    _query = query;
   }
 
   /// Replaces current data immediately and persists it when configured.
@@ -117,6 +131,20 @@ final class KacheResource<T> implements _KacheResourceBase {
 
   @override
   Future<void> revalidateAfterClear() async {
+    if (!_isDisposed) {
+      await refresh();
+    }
+  }
+
+  @override
+  Future<void> revalidateOnResume() async {
+    if (!_isDisposed) {
+      await _entry.revalidate(query, query.policy.refreshOnResume);
+    }
+  }
+
+  @override
+  Future<void> refreshActive() async {
     if (!_isDisposed) {
       await refresh();
     }

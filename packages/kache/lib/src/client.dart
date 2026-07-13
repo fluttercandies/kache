@@ -96,6 +96,24 @@ final class KacheClient {
     return resource;
   }
 
+  /// Revalidates active handles according to each resume policy.
+  Future<void> revalidateOnResume() {
+    _ensureOpen();
+    final resources = _resources.toList(growable: false);
+    return Future.wait<void>(
+      resources.map((resource) => resource.revalidateOnResume()),
+    );
+  }
+
+  /// Forces refresh on every active handle.
+  Future<void> refreshActive() {
+    _ensureOpen();
+    final resources = _resources.toList(growable: false);
+    return Future.wait<void>(
+      resources.map((resource) => resource.refreshActive()),
+    );
+  }
+
   /// Loads [query] without retaining a public resource handle.
   Future<KacheSnapshot<T>> prefetch<T>(KacheQuery<T> query) async {
     final resource = watch(query);
@@ -276,6 +294,18 @@ final class KacheClient {
         'An active cache key is already registered with another binding.',
       );
     }
+  }
+
+  void _rebind<T>(_KacheEntry<T> entry, KacheQuery<T> query) {
+    _ensureOpen();
+    if (query.key != entry.key) {
+      throw const KacheConfigurationException(
+        'resource_key_change',
+        'A resource can only update a query for its existing cache key.',
+      );
+    }
+    _validatePersistence(query);
+    _validateCompatibility<T>(entry, query);
   }
 
   void _release<T>(KacheResource<T> resource, _KacheEntry<T> entry) {

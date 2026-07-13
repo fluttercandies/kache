@@ -111,4 +111,102 @@ void main() {
     second.dispose();
     await client.close();
   });
+
+  test(
+    'updateQuery replaces same-key policy and fetcher without loading',
+    () async {
+      final client = KacheClient(clock: () => now);
+      final key = KacheKey('resource-rebind');
+      var firstFetches = 0;
+      var secondFetches = 0;
+      final resource = client.watch(
+        KacheQuery<String>.memory(
+          key: key,
+          fetch: (_) async {
+            firstFetches += 1;
+            return 'first';
+          },
+        ),
+      );
+      await resource.load();
+
+      resource.updateQuery(
+        KacheQuery<String>.memory(
+          key: key,
+          fetch: (_) async {
+            secondFetches += 1;
+            return 'second';
+          },
+        ),
+      );
+
+      expect(firstFetches, 1);
+      expect(secondFetches, 0);
+      expect((await resource.refresh()).requireData, 'second');
+      expect(secondFetches, 1);
+      resource.dispose();
+      await client.close();
+    },
+  );
+
+  test('updateQuery rejects changing the resource key', () async {
+    final client = KacheClient(clock: () => now);
+    final resource = client.watch(
+      KacheQuery<int>.memory(key: KacheKey('first-key'), fetch: (_) async => 1),
+    );
+
+    expect(
+      () => resource.updateQuery(
+        KacheQuery<int>.memory(
+          key: KacheKey('second-key'),
+          fetch: (_) async => 2,
+        ),
+      ),
+      throwsA(isA<KacheConfigurationException>()),
+    );
+    resource.dispose();
+    await client.close();
+  });
+
+  test('client lifecycle revalidation respects each handle policy', () async {
+    final client = KacheClient(clock: () => now);
+    var alwaysFetches = 0;
+    var neverFetches = 0;
+    final always = client.watch(
+      KacheQuery<int>.memory(
+        key: KacheKey('resume-always'),
+        policy: KachePolicy.cacheFirst(
+          freshFor: const Duration(hours: 1),
+          refreshOnResume: KacheRevalidation.always,
+        ),
+        fetch: (_) async => ++alwaysFetches,
+      ),
+    );
+    final never = client.watch(
+      KacheQuery<int>.memory(
+        key: KacheKey('resume-never'),
+        policy: KachePolicy.cacheFirst(
+          freshFor: const Duration(hours: 1),
+          refreshOnResume: KacheRevalidation.never,
+        ),
+        fetch: (_) async => ++neverFetches,
+      ),
+    );
+    await Future.wait(<Future<KacheSnapshot<int>>>[
+      always.load(),
+      never.load(),
+    ]);
+
+    await client.revalidateOnResume();
+
+    expect(alwaysFetches, 2);
+    expect(neverFetches, 1);
+
+    await client.refreshActive();
+    expect(alwaysFetches, 3);
+    expect(neverFetches, 2);
+    always.dispose();
+    never.dispose();
+    await client.close();
+  });
 }

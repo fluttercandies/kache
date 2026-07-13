@@ -152,6 +152,22 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     return _fetch(query, fetcher);
   }
 
+  Future<KacheSnapshot<T>> revalidate(
+    KacheQuery<T> query,
+    KacheRevalidation mode,
+  ) async {
+    _ensureCommandAvailable();
+    await _expireExisting(query.policy);
+    if (query.policy.isCacheOnly || mode == KacheRevalidation.never) {
+      return _snapshot;
+    }
+    final shouldFetch =
+        !_snapshot.hasData ||
+        mode == KacheRevalidation.always ||
+        _snapshot.freshness == KacheFreshness.stale;
+    return shouldFetch ? refresh(query) : _snapshot;
+  }
+
   Future<KacheSnapshot<T>> _performLoad(KacheQuery<T> query) async {
     if (!_didReadPersistence) {
       await _readPersistence(query);
