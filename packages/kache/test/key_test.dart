@@ -37,10 +37,14 @@ void main() {
       expect(KacheKey('n', [-42]).storageKey, 'k1:bg:AwAAAAMtNDI');
     });
 
-    test('encodes large integers', () {
+    test('encodes safe integer boundaries', () {
       expect(
-        KacheKey('n', [9223372036854775807]).storageKey,
-        'k1:bg:AwAAABM5MjIzMzcyMDM2ODU0Nzc1ODA3',
+        KacheKey('n', [9007199254740991]).storageKey,
+        'k1:bg:AwAAABA5MDA3MTk5MjU0NzQwOTkx',
+      );
+      expect(
+        KacheKey('n', [-9007199254740991]).storageKey,
+        'k1:bg:AwAAABEtOTAwNzE5OTI1NDc0MDk5MQ',
       );
     });
 
@@ -53,6 +57,11 @@ void main() {
       expect(KacheKey('n', ['😀']).storageKey, 'k1:bg:BAAAAATwn5iA');
     });
 
+    test('encodes empty strings and embedded NUL characters', () {
+      expect(KacheKey('n', ['']).storageKey, 'k1:bg:BAAAAAA');
+      expect(KacheKey('n', ['a\u0000b']).storageKey, 'k1:bg:BAAAAANhAGI');
+    });
+
     test('encodes byte lists', () {
       expect(
         KacheKey('n', [
@@ -60,6 +69,10 @@ void main() {
         ]).storageKey,
         'k1:bg:BQAAAAMA_xA',
       );
+    });
+
+    test('encodes empty byte lists', () {
+      expect(KacheKey('n', [Uint8List(0)]).storageKey, 'k1:bg:BQAAAAA');
     });
 
     test('encodes mixed parts in order', () {
@@ -77,6 +90,16 @@ void main() {
   });
 
   group('KacheKey identity', () {
+    test('normalizes integral num representations', () {
+      expect(KacheKey('n', [1]), KacheKey('n', [1.0]));
+      expect(KacheKey('n', [-1]), KacheKey('n', [-1.0]));
+      expect(KacheKey('n', [0]), KacheKey('n', [-0.0]));
+      expect(
+        KacheKey('n', [9007199254740991]),
+        KacheKey('n', [9007199254740991.0]),
+      );
+    });
+
     test('keeps typed values collision-free', () {
       expect(KacheKey('n', [1]), isNot(KacheKey('n', ['1'])));
       expect(KacheKey('n', [null]), isNot(KacheKey('n', ['null'])));
@@ -156,33 +179,61 @@ void main() {
 
   group('KacheKey validation', () {
     test('rejects an empty namespace', () {
-      expect(() => KacheKey(''), throwsA(isA<KacheKeyFormatException>()));
+      expect(_captureKeyException(() => KacheKey('')).source, isNull);
       expect(
-        () => KacheKey.namespacePrefix(''),
-        throwsA(isA<KacheKeyFormatException>()),
+        _captureKeyException(() => KacheKey.namespacePrefix('')).source,
+        isNull,
       );
     });
 
-    test('rejects doubles and arbitrary objects without stringifying', () {
-      expect(
-        () => KacheKey('n', [1.0]),
-        throwsA(isA<KacheKeyFormatException>()),
-      );
-      expect(
-        () => KacheKey('n', [_Stringifiable()]),
-        throwsA(isA<KacheKeyFormatException>()),
-      );
+    test('rejects values outside the safe integer range', () {
+      for (final part in <num>[
+        9007199254740992,
+        -9007199254740992,
+        9007199254740992.0,
+        -9007199254740992.0,
+      ]) {
+        expect(
+          _captureKeyException(() => KacheKey('n', [part])).source,
+          isNull,
+        );
+      }
+    });
+
+    test('rejects fractional and special numeric values', () {
+      for (final part in <num>[
+        0.5,
+        -1.25,
+        double.nan,
+        double.infinity,
+        double.negativeInfinity,
+      ]) {
+        expect(
+          _captureKeyException(() => KacheKey('n', [part])).source,
+          isNull,
+        );
+      }
+    });
+
+    test('rejects arbitrary objects without stringifying them', () {
+      final part = _Stringifiable();
+
+      final exception = _captureKeyException(() => KacheKey('n', [part]));
+      final rendered = exception.toString();
+
+      expect(exception.source, isNull);
+      expect(part.wasStringified, isFalse);
+      expect(rendered, isNot(contains('object-secret')));
     });
 
     test('rejects unpaired surrogates in namespaces', () {
       for (final namespace in _invalidUnicodeStrings) {
+        expect(_captureKeyException(() => KacheKey(namespace)).source, isNull);
         expect(
-          () => KacheKey(namespace),
-          throwsA(isA<KacheKeyFormatException>()),
-        );
-        expect(
-          () => KacheKey.namespacePrefix(namespace),
-          throwsA(isA<KacheKeyFormatException>()),
+          _captureKeyException(
+            () => KacheKey.namespacePrefix(namespace),
+          ).source,
+          isNull,
         );
       }
     });
@@ -190,10 +241,42 @@ void main() {
     test('rejects unpaired surrogates in string parts', () {
       for (final part in _invalidUnicodeStrings) {
         expect(
-          () => KacheKey('n', [part]),
-          throwsA(isA<KacheKeyFormatException>()),
+          _captureKeyException(() => KacheKey('n', [part])).source,
+          isNull,
         );
       }
+    });
+
+    test('does not retain or render sensitive namespace and string parts', () {
+      final namespace = 'namespace-secret${String.fromCharCode(0xd800)}';
+      final stringPart = 'part-secret${String.fromCharCode(0xdc00)}';
+
+      final namespaceFailure = _captureKeyException(() => KacheKey(namespace));
+      final partFailure = _captureKeyException(
+        () => KacheKey('n', [stringPart]),
+      );
+
+      expect(namespaceFailure.source, isNull);
+      expect(namespaceFailure.toString(), isNot(contains('namespace-secret')));
+      expect(partFailure.source, isNull);
+      expect(partFailure.toString(), isNot(contains('part-secret')));
+    });
+
+    test('does not retain or render byte payloads from failed keys', () {
+      const secret = 'payload-secret';
+      final object = _Stringifiable();
+      final payload = Uint8List.fromList(secret.codeUnits);
+
+      final failure = _captureKeyException(
+        () => KacheKey('n', [payload, object]),
+      );
+      final rendered = failure.toString();
+
+      expect(failure.source, isNull);
+      expect(object.wasStringified, isFalse);
+      expect(rendered, isNot(contains(secret)));
+      expect(rendered, isNot(contains(payload.toString())));
+      expect(rendered, isNot(contains('object-secret')));
     });
   });
 }
@@ -202,6 +285,9 @@ final _invalidUnicodeStrings = <String>[
   String.fromCharCode(0xd800),
   String.fromCharCode(0xdc00),
   String.fromCharCodes([0xd800, 0x41]),
+  String.fromCharCodes([0x41, 0xdc00]),
+  String.fromCharCodes([0xd800, 0xd800, 0xdc00]),
+  String.fromCharCodes([0xd800, 0xdc00, 0xdc00]),
 ];
 
 Iterable<Object?> _mutateBytesDuringIteration(Uint8List bytes) sync* {
@@ -211,6 +297,20 @@ Iterable<Object?> _mutateBytesDuringIteration(Uint8List bytes) sync* {
 }
 
 final class _Stringifiable {
+  var wasStringified = false;
+
   @override
-  String toString() => 'accepted-by-mistake';
+  String toString() {
+    wasStringified = true;
+    return 'object-secret';
+  }
+}
+
+KacheKeyFormatException _captureKeyException(void Function() action) {
+  try {
+    action();
+  } on KacheKeyFormatException catch (error) {
+    return error;
+  }
+  fail('Expected KacheKeyFormatException.');
 }

@@ -3,30 +3,53 @@ import 'dart:typed_data';
 
 const _formatPrefix = 'k1:';
 const _maxUint32 = 0xffffffff;
+const _maxSafeInteger = 9007199254740991;
+const _minSafeInteger = -_maxSafeInteger;
 
 /// A stable, typed cache key suitable for memory and persistent storage.
 ///
-/// Storage keys use the versioned `k1` format. The format is canonical and is
-/// intended to remain byte-for-byte stable after publication.
+/// The canonical storage format is
+/// `k1:<base64url(namespace)>:<base64url(parts)>`. Both base64url sections omit
+/// padding. The namespace is encoded as UTF-8 without Unicode normalization.
+///
+/// The binary parts stream uses tags `0` for `null`, `1` for `false`, `2` for
+/// `true`, `3` for integer-valued numbers, `4` for strings, and `5` for byte
+/// lists. Tags `3` through `5` are followed by an unsigned 32-bit big-endian
+/// byte length and then the value bytes. Numbers use canonical ASCII decimal,
+/// strings use unnormalized UTF-8, and byte lists are copied as-is.
+///
+/// This versioned format is intended to remain byte-for-byte stable after
+/// publication. For example:
+///
+/// ```dart
+/// final key = KacheKey('users', [42, 'profile']);
+/// print(key.storageKey);
+/// ```
 final class KacheKey {
   /// Creates a key in [namespace] from an ordered sequence of typed [parts].
   ///
-  /// Supported parts are `null`, [bool], [int], [String], and [Uint8List].
-  /// The iterable and byte-list values are copied during construction.
+  /// Supported parts are `null`, [bool], integer-valued [num] instances in the
+  /// JavaScript safe-integer range `-(2^53 - 1)` through `2^53 - 1`, [String],
+  /// and [Uint8List]. Integral `int` and `double` representations produce the
+  /// same key; larger integer identifiers should be supplied as strings.
+  ///
+  /// The iterable is consumed synchronously. Each byte list is copied and
+  /// encoded before iteration continues, so later input mutation cannot change
+  /// the key. Strings are not normalized.
   ///
   /// Throws [KacheKeyFormatException] when the namespace is empty, a string
-  /// contains an unpaired surrogate, or a part has an unsupported type.
+  /// contains an unpaired surrogate, a number is fractional, non-finite, or
+  /// outside the safe range, or a part has an unsupported type. Exceptions do
+  /// not retain or render the rejected input value.
   factory KacheKey(String namespace, [Iterable<Object?> parts = const []]) {
     _validateNamespace(namespace);
 
-    final copiedParts = <Object?>[];
-    for (final part in parts) {
-      copiedParts.add(part is Uint8List ? Uint8List.fromList(part) : part);
-    }
-
     final partBytes = BytesBuilder(copy: false);
-    for (final part in copiedParts) {
-      _writePart(partBytes, part);
+    var partIndex = 0;
+    for (final part in parts) {
+      final ownedPart = part is Uint8List ? Uint8List.fromList(part) : part;
+      _writePart(partBytes, ownedPart, partIndex);
+      partIndex++;
     }
 
     return KacheKey._(
@@ -64,42 +87,45 @@ final class KacheKey {
 
 /// Reports a namespace or key-part value that cannot be encoded canonically.
 final class KacheKeyFormatException extends FormatException {
-  /// Creates a cache-key format exception.
-  KacheKeyFormatException(super.message, [super.source, super.offset]);
+  KacheKeyFormatException._(super.message);
 }
 
 void _validateNamespace(String namespace) {
   if (namespace.isEmpty) {
-    throw KacheKeyFormatException(
-      'The namespace must not be empty.',
-      namespace,
-    );
+    throw KacheKeyFormatException._('Invalid namespace (size: 0).');
   }
-  _validateUnicode(namespace, 'namespace');
+  _validateUnicode(namespace, stage: 'namespace');
 }
 
-void _validateUnicode(String value, String description) {
+void _validateUnicode(String value, {required String stage, int? partIndex}) {
   final codeUnits = value.codeUnits;
   for (var index = 0; index < codeUnits.length; index++) {
     final codeUnit = codeUnits[index];
     if (_isHighSurrogate(codeUnit)) {
       if (index + 1 == codeUnits.length ||
           !_isLowSurrogate(codeUnits[index + 1])) {
-        throw KacheKeyFormatException(
-          'The $description contains an unpaired high surrogate.',
-          value,
-          index,
+        throw KacheKeyFormatException._(
+          _unicodeErrorMessage(stage, partIndex, index, codeUnits.length),
         );
       }
       index++;
     } else if (_isLowSurrogate(codeUnit)) {
-      throw KacheKeyFormatException(
-        'The $description contains an unpaired low surrogate.',
-        value,
-        index,
+      throw KacheKeyFormatException._(
+        _unicodeErrorMessage(stage, partIndex, index, codeUnits.length),
       );
     }
   }
+}
+
+String _unicodeErrorMessage(
+  String stage,
+  int? partIndex,
+  int codeUnitIndex,
+  int size,
+) {
+  final partLocation = partIndex == null ? '' : ' at part index $partIndex';
+  return 'Invalid Unicode in $stage$partLocation '
+      '(code-unit index: $codeUnitIndex, size: $size).';
 }
 
 bool _isHighSurrogate(int codeUnit) => codeUnit >= 0xd800 && codeUnit <= 0xdbff;
@@ -111,32 +137,55 @@ String _encodeString(String value) => _encodeBytes(utf8.encode(value));
 String _encodeBytes(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
-void _writePart(BytesBuilder bytes, Object? part) {
+void _writePart(BytesBuilder bytes, Object? part, int partIndex) {
   if (part == null) {
     bytes.addByte(0);
   } else if (part is bool) {
     bytes.addByte(part ? 2 : 1);
-  } else if (part is int) {
-    _writeLengthPrefixed(bytes, 3, ascii.encode(part.toString()));
+  } else if (part is num) {
+    _writeLengthPrefixed(
+      bytes,
+      3,
+      ascii.encode(_canonicalInteger(part, partIndex)),
+      partIndex,
+    );
   } else if (part is String) {
-    _validateUnicode(part, 'string part');
-    _writeLengthPrefixed(bytes, 4, utf8.encode(part));
+    _validateUnicode(part, stage: 'string part', partIndex: partIndex);
+    _writeLengthPrefixed(bytes, 4, utf8.encode(part), partIndex);
   } else if (part is Uint8List) {
-    _writeLengthPrefixed(bytes, 5, part);
+    _writeLengthPrefixed(bytes, 5, part, partIndex);
   } else {
-    throw KacheKeyFormatException(
-      'Unsupported key part type: ${part.runtimeType}.',
-      part,
+    throw KacheKeyFormatException._(
+      'Unsupported key part at index $partIndex '
+      '(type: ${part.runtimeType}).',
     );
   }
 }
 
-void _writeLengthPrefixed(BytesBuilder target, int tag, List<int> value) {
+String _canonicalInteger(num value, int partIndex) {
+  if (!value.isFinite ||
+      value < _minSafeInteger ||
+      value > _maxSafeInteger ||
+      value != value.truncate()) {
+    throw KacheKeyFormatException._(
+      'Invalid numeric key part at index $partIndex '
+      '(type: ${value.runtimeType}).',
+    );
+  }
+  return value.toInt().toString();
+}
+
+void _writeLengthPrefixed(
+  BytesBuilder target,
+  int tag,
+  List<int> value,
+  int partIndex,
+) {
   final length = value.length;
   if (length > _maxUint32) {
-    throw KacheKeyFormatException(
-      'A key part cannot exceed $_maxUint32 bytes.',
-      value,
+    throw KacheKeyFormatException._(
+      'Key part at index $partIndex exceeds the binary length limit '
+      '(size: $length).',
     );
   }
 
