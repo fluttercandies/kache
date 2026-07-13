@@ -1,6 +1,10 @@
 part of 'client.dart';
 
 abstract interface class _KacheResourceBase {
+  KacheKey get key;
+
+  Future<void> revalidateAfterClear();
+
   void dispose();
 }
 
@@ -38,6 +42,9 @@ final class KacheResource<T> implements _KacheResourceBase {
   /// The immutable declaration owned by this handle.
   final KacheQuery<T> query;
 
+  @override
+  KacheKey get key => query.key;
+
   final StreamController<KacheSnapshot<T>> _updates =
       StreamController<KacheSnapshot<T>>.broadcast(sync: true);
   late final StreamSubscription<KacheSnapshot<T>> _entrySubscription;
@@ -70,6 +77,24 @@ final class KacheResource<T> implements _KacheResourceBase {
     return _entry.refresh(query);
   }
 
+  /// Replaces current data immediately and persists it when configured.
+  Future<KacheSnapshot<T>> setData(T data) {
+    _ensureActive();
+    return _entry.setData(data);
+  }
+
+  /// Marks current data stale and optionally starts a fresh fetch.
+  Future<KacheSnapshot<T>> invalidate({bool refetch = true}) {
+    _ensureActive();
+    return _entry.invalidate(query, refetch: refetch);
+  }
+
+  /// Removes current memory and persisted data without fetching.
+  Future<KacheSnapshot<T>> remove() {
+    _ensureActive();
+    return _entry.remove();
+  }
+
   /// Idempotently releases this handle and closes its stream.
   @override
   void dispose() {
@@ -80,6 +105,13 @@ final class KacheResource<T> implements _KacheResourceBase {
     unawaited(_entrySubscription.cancel());
     _closeUpdates();
     _client._release(this, _entry);
+  }
+
+  @override
+  Future<void> revalidateAfterClear() async {
+    if (!_isDisposed) {
+      await refresh();
+    }
   }
 
   void _startAutomaticLoad() {

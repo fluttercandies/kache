@@ -31,6 +31,18 @@ enum KacheFailureKind {
   lifecycle,
 }
 
+/// The non-sensitive shape of the operation context for a failure.
+enum KacheFailureScope {
+  /// A single cache key.
+  key,
+
+  /// A validated cache namespace.
+  namespace,
+
+  /// The whole cache client or persistence backend.
+  global,
+}
+
 /// A classified failure that retains the original exception and stack trace.
 ///
 /// Its string representation is intentionally sanitized and never includes
@@ -41,11 +53,29 @@ final class KacheFailure {
   /// [persistenceStage] is only meaningful for persistence-related kinds.
   KacheFailure({
     required this.kind,
-    required this.key,
+    this.key,
+    this.namespace,
     required this.cause,
     required this.stackTrace,
     this.persistenceStage,
   }) {
+    if (key != null && namespace != null) {
+      throw ArgumentError(
+        'A failure cannot target both a key and a namespace.',
+      );
+    }
+    if (namespace != null && kind != KacheFailureKind.clear) {
+      throw ArgumentError('Only clear failures may target a namespace.');
+    }
+    final allowsGlobalScope =
+        kind == KacheFailureKind.clear ||
+        kind == KacheFailureKind.lifecycle ||
+        kind == KacheFailureKind.configuration;
+    if (!allowsGlobalScope && key == null) {
+      throw ArgumentError(
+        'Only clear failures may omit a key or target a namespace.',
+      );
+    }
     final isPersistence =
         kind == KacheFailureKind.persistenceRead ||
         kind == KacheFailureKind.persistenceWrite ||
@@ -63,8 +93,18 @@ final class KacheFailure {
   /// The stable failure category.
   final KacheFailureKind kind;
 
-  /// The affected cache key. It is never rendered by [toString].
-  final KacheKey key;
+  /// The affected cache key for a key-scoped failure.
+  final KacheKey? key;
+
+  /// The affected namespace for a namespace-scoped clear failure.
+  final KacheNamespace? namespace;
+
+  /// The non-sensitive operation scope.
+  KacheFailureScope get scope => key != null
+      ? KacheFailureScope.key
+      : namespace != null
+      ? KacheFailureScope.namespace
+      : KacheFailureScope.global;
 
   /// The original error object.
   final Object cause;
@@ -79,8 +119,9 @@ final class KacheFailure {
   String toString() {
     final stage = persistenceStage;
     return stage == null
-        ? 'KacheFailure(kind: ${kind.name})'
-        : 'KacheFailure(kind: ${kind.name}, stage: ${stage.name})';
+        ? 'KacheFailure(kind: ${kind.name}, scope: ${scope.name})'
+        : 'KacheFailure('
+              'kind: ${kind.name}, scope: ${scope.name}, stage: ${stage.name})';
   }
 }
 

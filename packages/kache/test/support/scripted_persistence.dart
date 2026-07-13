@@ -9,6 +9,9 @@ final class ScriptedPersistence implements KachePersistenceBackend {
   Object? deleteError;
   StackTrace? deleteStackTrace;
   KachePersistenceMaintenance? maintenance;
+  Future<void> Function(Object? entry)? onWrite;
+  Future<void> Function()? onClear;
+  Future<void> Function()? onClose;
 
   int readCount = 0;
   int writeCount = 0;
@@ -56,6 +59,7 @@ final class ScriptedPersistence implements KachePersistenceBackend {
     if (error != null) {
       Error.throwWithStackTrace(error, writeStackTrace ?? StackTrace.current);
     }
+    await onWrite?.call(entry);
     storedEntry = entry;
   }
 
@@ -74,6 +78,7 @@ final class ScriptedPersistence implements KachePersistenceBackend {
   Future<void> clearNamespace({required KacheNamespace namespace}) async {
     _ensureOpen(KachePersistenceOperation.clearNamespace);
     clearNamespaceCount += 1;
+    await onClear?.call();
     storedEntry = null;
   }
 
@@ -81,6 +86,7 @@ final class ScriptedPersistence implements KachePersistenceBackend {
   Future<void> clear() async {
     _ensureOpen(KachePersistenceOperation.clear);
     clearCount += 1;
+    await onClear?.call();
     storedEntry = null;
   }
 
@@ -89,6 +95,7 @@ final class ScriptedPersistence implements KachePersistenceBackend {
     if (isClosed) {
       return;
     }
+    await onClose?.call();
     closeCount += 1;
     isClosed = true;
     storedEntry = null;
