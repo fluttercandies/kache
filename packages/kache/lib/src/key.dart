@@ -6,6 +6,38 @@ const _maxUint32 = 0xffffffff;
 const _maxSafeInteger = 9007199254740991;
 const _minSafeInteger = -_maxSafeInteger;
 
+/// A validated cache namespace and its canonical storage prefix.
+///
+/// Namespace values are encoded without Unicode normalization. Constructing a
+/// namespace validates the same empty-string and Unicode invariants as
+/// [KacheKey]. Pass this type to persistence APIs so destructive namespace
+/// operations cannot receive an arbitrary raw prefix.
+final class KacheNamespace {
+  /// Creates a validated namespace from [value].
+  ///
+  /// Throws [KacheKeyFormatException] when [value] is empty or contains an
+  /// unpaired surrogate. The exception does not retain or render [value].
+  factory KacheNamespace(String value) {
+    _validateNamespace(value);
+    return KacheNamespace._(value, '$_formatPrefix${_encodeString(value)}:');
+  }
+
+  const KacheNamespace._(this.value, this.storagePrefix);
+
+  /// The validated, unnormalized namespace value.
+  final String value;
+
+  /// The canonical prefix shared by every [KacheKey] in this namespace.
+  final String storagePrefix;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is KacheNamespace && value == other.value;
+
+  @override
+  int get hashCode => value.hashCode;
+}
+
 /// A stable, typed cache key suitable for memory and persistent storage.
 ///
 /// The canonical storage format is
@@ -42,7 +74,7 @@ final class KacheKey {
   /// outside the safe range, or a part has an unsupported type. Exceptions do
   /// not retain or render the rejected input value.
   factory KacheKey(String namespace, [Iterable<Object?> parts = const []]) {
-    _validateNamespace(namespace);
+    final validatedNamespace = KacheNamespace(namespace);
 
     final partBytes = BytesBuilder(copy: false);
     var partIndex = 0;
@@ -53,9 +85,8 @@ final class KacheKey {
     }
 
     return KacheKey._(
-      namespace,
-      '$_formatPrefix${_encodeString(namespace)}:'
-      '${_encodeBytes(partBytes.takeBytes())}',
+      validatedNamespace.value,
+      '${validatedNamespace.storagePrefix}${_encodeBytes(partBytes.takeBytes())}',
     );
   }
 
@@ -71,10 +102,8 @@ final class KacheKey {
   ///
   /// Throws [KacheKeyFormatException] when [namespace] is empty or contains an
   /// unpaired surrogate.
-  static String namespacePrefix(String namespace) {
-    _validateNamespace(namespace);
-    return '$_formatPrefix${_encodeString(namespace)}:';
-  }
+  static String namespacePrefix(String namespace) =>
+      KacheNamespace(namespace).storagePrefix;
 
   @override
   bool operator ==(Object other) =>

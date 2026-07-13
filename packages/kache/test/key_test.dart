@@ -136,6 +136,34 @@ void main() {
   });
 
   group('KacheKey namespace prefixes', () {
+    test('creates a validated namespace with its canonical prefix', () {
+      final namespace = KacheNamespace('users');
+
+      expect(namespace.value, 'users');
+      expect(namespace.storagePrefix, 'k1:dXNlcnM:');
+      expect(KacheKey.namespacePrefix('users'), namespace.storagePrefix);
+    });
+
+    test('uses the namespace value for equality and hash codes', () {
+      final first = KacheNamespace('users');
+      final equal = KacheNamespace('users');
+      final different = KacheNamespace('profiles');
+
+      expect(first, equal);
+      expect(first.hashCode, equal.hashCode);
+      expect(first, isNot(different));
+    });
+
+    test('rejects empty and invalid Unicode namespace values', () {
+      expect(() => KacheNamespace(''), throwsA(isA<KacheKeyFormatException>()));
+      for (final namespace in _invalidUnicodeStrings) {
+        expect(
+          () => KacheNamespace(namespace),
+          throwsA(isA<KacheKeyFormatException>()),
+        );
+      }
+    });
+
     test('returns the canonical namespace prefix', () {
       expect(KacheKey.namespacePrefix('foo'), 'k1:Zm9v:');
       expect(KacheKey.namespacePrefix('a:b'), 'k1:YTpi:');

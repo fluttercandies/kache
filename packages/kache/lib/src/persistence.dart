@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'key.dart';
 
 /// A storage backend that persists typed cache entries.
@@ -5,11 +7,18 @@ import 'key.dart';
 /// Implementations own serialization, migrations, and physical storage. The
 /// core library passes typed values and an opaque [KachePersistenceBinding]
 /// without prescribing a record format.
+///
+/// Implementations must wrap backend-defined failures in
+/// [KachePersistenceException] using the operation being performed and one of
+/// the stages allowed by that exception's constructor.
 abstract interface class KachePersistenceBackend {
   /// Reads the entry for [key], or returns `null` when no entry exists.
   ///
   /// The [binding] describes backend-specific handling for `T`. Implementations
   /// should call [KachePersistenceBinding.ensureBackend] before using it.
+  /// Storage access failures use [KachePersistenceStage.backend], initial value
+  /// interpretation failures use [KachePersistenceStage.decode], and deferred
+  /// maintenance failures use [KachePersistenceStage.migration].
   Future<KachePersistenceRead<T>?> read<T>({
     required KacheKey key,
     required KachePersistenceBinding<T> binding,
@@ -18,7 +27,9 @@ abstract interface class KachePersistenceBackend {
   /// Writes a typed [entry] for [key] using [binding].
   ///
   /// Implementations should call [KachePersistenceBinding.ensureBackend]
-  /// before using the binding.
+  /// before using the binding. Value conversion failures use
+  /// [KachePersistenceStage.encode], while storage access failures use
+  /// [KachePersistenceStage.backend].
   Future<void> write<T>({
     required KacheKey key,
     required KachePersistenceBinding<T> binding,
@@ -26,18 +37,31 @@ abstract interface class KachePersistenceBackend {
   });
 
   /// Deletes the persisted entry for [key] when present.
+  ///
+  /// Failures must use [KachePersistenceOperation.delete] with
+  /// [KachePersistenceStage.backend].
   Future<void> delete({required KacheKey key});
 
-  /// Deletes entries whose canonical storage keys start with [namespacePrefix].
-  Future<void> clearNamespace({required String namespacePrefix});
+  /// Deletes every entry in [namespace].
+  ///
+  /// Failures must use [KachePersistenceOperation.clearNamespace] with
+  /// [KachePersistenceStage.backend].
+  Future<void> clearNamespace({required KacheNamespace namespace});
 
   /// Deletes every entry managed by this backend.
+  ///
+  /// Failures must use [KachePersistenceOperation.clear] with
+  /// [KachePersistenceStage.backend].
   Future<void> clear();
 
   /// Releases resources owned by this backend.
   ///
   /// Client code only calls this for a backend configured with
-  /// [KachePersistenceOwnership.owned].
+  /// [KachePersistenceOwnership.owned]. This operation must be idempotent. When
+  /// its future completes, owned resources must be safely released. Subsequent
+  /// operations other than [close] must fail with a [KachePersistenceException]
+  /// for the attempted operation at [KachePersistenceStage.backend]. A close
+  /// failure uses [KachePersistenceOperation.close] at that same stage.
   Future<void> close();
 }
 
@@ -48,8 +72,12 @@ abstract interface class KachePersistenceBackend {
 abstract class KachePersistenceBinding<T> {
   /// Creates a binding owned by [backend] with a stable [fingerprint].
   ///
-  /// The fingerprint must contain at least one non-whitespace character and
-  /// should change whenever the binding's storage interpretation changes.
+  /// The fingerprint must contain at least one non-whitespace character. It
+  /// must deterministically and uniquely identify the complete storage
+  /// interpretation represented by this binding. Equal fingerprints must mean
+  /// that every persisted value is interpreted identically; any change to an
+  /// interpretation rule requires a different fingerprint.
+  ///
   /// Throws [KachePersistenceBindingException] for an invalid fingerprint.
   KachePersistenceBinding({required this.backend, required String fingerprint})
     : fingerprint = _validateFingerprint(fingerprint);
@@ -57,7 +85,7 @@ abstract class KachePersistenceBinding<T> {
   /// The only backend instance that may use this binding.
   final KachePersistenceBackend backend;
 
-  /// An opaque, stable identity for this binding's storage interpretation.
+  /// A deterministic, unique identity for the complete storage interpretation.
   final String fingerprint;
 
   /// Verifies that [candidate] is the backend instance that owns this binding.
@@ -135,19 +163,61 @@ final class KachePersistedEntry<T> {
   final KachePersistedMetadata metadata;
 }
 
-/// A successful persistence read and optional asynchronous maintenance work.
+/// Lazily performs backend-defined persistence maintenance.
+typedef KachePersistenceMaintenance = FutureOr<void> Function();
+
+/// A successful persistence read and optional lazy maintenance work.
 final class KachePersistenceRead<T> {
   /// Creates a read result containing [entry].
   ///
-  /// [maintenance] may report migration or rewrite completion after the entry
-  /// has already been returned. Awaiting the entry never awaits maintenance.
-  const KachePersistenceRead({required this.entry, this.maintenance});
+  /// [maintenance] is not invoked by construction. Core code may read [entry]
+  /// immediately and later call [runMaintenance] to observe migration or
+  /// rewrite completion.
+  KachePersistenceRead({
+    required this.entry,
+    KachePersistenceMaintenance? maintenance,
+  }) : _maintenance = maintenance;
 
   /// The typed entry available to the cache immediately.
   final KachePersistedEntry<T> entry;
 
-  /// Optional migration or rewrite work that completes independently.
-  final Future<void>? maintenance;
+  final KachePersistenceMaintenance? _maintenance;
+  Future<void>? _maintenanceFuture;
+
+  /// Whether this read includes deferred migration or rewrite work.
+  bool get hasMaintenance => _maintenance != null;
+
+  /// Starts maintenance once and returns its shared result future.
+  ///
+  /// The first call invokes the callback through [Future.sync], so synchronous
+  /// throws become asynchronous errors. Later calls return the identical future
+  /// and never execute the callback again. When [hasMaintenance] is `false`,
+  /// the shared future completes successfully without performing work.
+  Future<void> runMaintenance() {
+    final existing = _maintenanceFuture;
+    if (existing != null) {
+      return existing;
+    }
+
+    final completer = Completer<void>();
+    final shared = completer.future;
+    _maintenanceFuture = shared;
+
+    final maintenance = _maintenance;
+    if (maintenance == null) {
+      completer.complete();
+    } else {
+      unawaited(
+        Future<void>.sync(maintenance).then<void>(
+          (_) => completer.complete(),
+          onError: (Object error, StackTrace stackTrace) {
+            completer.completeError(error, stackTrace);
+          },
+        ),
+      );
+    }
+    return shared;
+  }
 }
 
 /// Determines whether a client may close its persistence backend.
@@ -201,7 +271,32 @@ enum KachePersistenceStage {
 /// exception does not contain cache keys or payloads.
 final class KachePersistenceException implements Exception {
   /// Creates a persistence exception without transforming the original error.
-  const KachePersistenceException({
+  ///
+  /// Valid stages are backend, decode, and migration for read; backend and
+  /// encode for write; and backend only for delete, namespace clear, clear, and
+  /// close. Throws [ArgumentError] without rendering [cause] when the operation
+  /// and stage combination is invalid.
+  factory KachePersistenceException({
+    required KachePersistenceOperation operation,
+    required KachePersistenceStage stage,
+    required Object cause,
+    required StackTrace stackTrace,
+  }) {
+    if (!_isValidPersistenceStage(operation, stage)) {
+      throw ArgumentError(
+        'Persistence stage ${stage.name} is not valid for '
+        'operation ${operation.name}.',
+      );
+    }
+    return KachePersistenceException._(
+      operation: operation,
+      stage: stage,
+      cause: cause,
+      stackTrace: stackTrace,
+    );
+  }
+
+  const KachePersistenceException._({
     required this.operation,
     required this.stage,
     required this.cause,
@@ -232,3 +327,20 @@ String _validateFingerprint(String fingerprint) {
   }
   return fingerprint;
 }
+
+bool _isValidPersistenceStage(
+  KachePersistenceOperation operation,
+  KachePersistenceStage stage,
+) => switch (operation) {
+  KachePersistenceOperation.read =>
+    stage == KachePersistenceStage.backend ||
+        stage == KachePersistenceStage.decode ||
+        stage == KachePersistenceStage.migration,
+  KachePersistenceOperation.write =>
+    stage == KachePersistenceStage.backend ||
+        stage == KachePersistenceStage.encode,
+  KachePersistenceOperation.delete ||
+  KachePersistenceOperation.clearNamespace ||
+  KachePersistenceOperation.clear ||
+  KachePersistenceOperation.close => stage == KachePersistenceStage.backend,
+};

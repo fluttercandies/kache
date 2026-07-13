@@ -110,9 +110,7 @@ void main() {
         await backend.delete(key: first);
         expect(await backend.read(key: first, binding: binding), isNull);
 
-        await backend.clearNamespace(
-          namespacePrefix: KacheKey.namespacePrefix('second'),
-        );
+        await backend.clearNamespace(namespace: KacheNamespace('second'));
         expect(await backend.read(key: second, binding: binding), isNull);
 
         await backend.clear();
@@ -218,7 +216,7 @@ void main() {
   });
 
   group('KachePersistenceRead', () {
-    test('allows maintenance to be absent', () {
+    test('allows maintenance to be absent', () async {
       final read = KachePersistenceRead<String>(
         entry: KachePersistedEntry(
           data: 'cached',
@@ -229,38 +227,33 @@ void main() {
       );
 
       expect(read.entry.data, 'cached');
-      expect(read.maintenance, isNull);
+      expect(read.hasMaintenance, isFalse);
+      await expectLater(read.runMaintenance(), completes);
     });
 
-    test('returns the entry before pending maintenance completes', () async {
-      final backend = _FakeBackend();
-      final binding = _Binding<String>(
-        backend: backend,
-        fingerprint: 'string-v1',
-      );
-      final key = KacheKey('maintenance');
-      final completer = Completer<void>();
-      backend.maintenance = completer.future;
-      await backend.write(
-        key: key,
-        binding: binding,
+    test('does not start or report lazy maintenance before run', () {
+      var invocationCount = 0;
+
+      final read = KachePersistenceRead<String>(
         entry: KachePersistedEntry(
           data: 'available-now',
           metadata: KachePersistedMetadata(
             fetchedAt: DateTime.utc(2026, 10, 11),
           ),
         ),
+        maintenance: () {
+          invocationCount++;
+          throw StateError('not observed before run');
+        },
       );
 
-      final read = await backend.read(key: key, binding: binding);
-
-      expect(read?.entry.data, 'available-now');
-      expect(completer.isCompleted, isFalse);
-      completer.complete();
-      await read?.maintenance;
+      expect(read.entry.data, 'available-now');
+      expect(read.hasMaintenance, isTrue);
+      expect(invocationCount, 0);
     });
 
     test('allows successful maintenance to be observed', () async {
+      var invocationCount = 0;
       final read = KachePersistenceRead<String>(
         entry: KachePersistedEntry(
           data: 'cached',
@@ -268,10 +261,13 @@ void main() {
             fetchedAt: DateTime.utc(2026, 11, 12),
           ),
         ),
-        maintenance: Future<void>.value(),
+        maintenance: () {
+          invocationCount++;
+        },
       );
 
-      await expectLater(read.maintenance, completes);
+      await expectLater(read.runMaintenance(), completes);
+      expect(invocationCount, 1);
     });
 
     test('allows failed maintenance to be observed', () async {
@@ -283,11 +279,79 @@ void main() {
             fetchedAt: DateTime.utc(2026, 12, 13),
           ),
         ),
-        maintenance: Future<void>.error(cause),
+        maintenance: () => Future<void>.error(cause),
       );
 
       expect(read.entry.data, 'still-usable');
-      await expectLater(read.maintenance, throwsA(same(cause)));
+      await expectLater(read.runMaintenance(), throwsA(same(cause)));
+    });
+
+    test('runs maintenance once and shares the same future', () async {
+      final completer = Completer<void>();
+      var invocationCount = 0;
+      final read = KachePersistenceRead<String>(
+        entry: KachePersistedEntry(
+          data: 'cached',
+          metadata: KachePersistedMetadata(
+            fetchedAt: DateTime.utc(2027, 1, 14),
+          ),
+        ),
+        maintenance: () {
+          invocationCount++;
+          return completer.future;
+        },
+      );
+
+      final first = read.runMaintenance();
+      final second = read.runMaintenance();
+
+      expect(second, same(first));
+      expect(invocationCount, 1);
+      completer.complete();
+      await first;
+    });
+
+    test('shares the cached future during synchronous reentrancy', () async {
+      var invocationCount = 0;
+      late Future<void> reentrant;
+      late KachePersistenceRead<String> read;
+      read = KachePersistenceRead<String>(
+        entry: KachePersistedEntry(
+          data: 'cached',
+          metadata: KachePersistedMetadata(
+            fetchedAt: DateTime.utc(2027, 2, 15),
+          ),
+        ),
+        maintenance: () {
+          invocationCount++;
+          if (invocationCount == 1) {
+            reentrant = read.runMaintenance();
+          }
+        },
+      );
+
+      final first = read.runMaintenance();
+
+      expect(invocationCount, 1);
+      expect(reentrant, same(first));
+      await first;
+    });
+
+    test('turns synchronous maintenance throws into future errors', () async {
+      final cause = StateError('synchronous migration failure');
+      final read = KachePersistenceRead<String>(
+        entry: KachePersistedEntry(
+          data: 'still-usable',
+          metadata: KachePersistedMetadata(
+            fetchedAt: DateTime.utc(2027, 2, 15),
+          ),
+        ),
+        maintenance: () => throw cause,
+      );
+
+      late Future<void> maintenance;
+      expect(() => maintenance = read.runMaintenance(), returnsNormally);
+      await expectLater(maintenance, throwsA(same(cause)));
     });
   });
 
@@ -343,8 +407,80 @@ void main() {
         KachePersistenceStage.migration,
       ]);
     });
+
+    test('accepts the complete valid operation and stage matrix', () {
+      for (final MapEntry(key: operation, value: stages)
+          in _validPersistenceStages.entries) {
+        for (final stage in stages) {
+          expect(
+            () => KachePersistenceException(
+              operation: operation,
+              stage: stage,
+              cause: StateError('expected failure'),
+              stackTrace: StackTrace.current,
+            ),
+            returnsNormally,
+          );
+        }
+      }
+    });
+
+    test('rejects every invalid operation and stage combination', () {
+      for (final operation in KachePersistenceOperation.values) {
+        final validStages = _validPersistenceStages[operation]!;
+        for (final stage in KachePersistenceStage.values) {
+          if (validStages.contains(stage)) {
+            continue;
+          }
+          expect(
+            () => KachePersistenceException(
+              operation: operation,
+              stage: stage,
+              cause: StateError('invalid combination'),
+              stackTrace: StackTrace.current,
+            ),
+            throwsArgumentError,
+            reason: '${operation.name}/${stage.name}',
+          );
+        }
+      }
+    });
+
+    test('does not render the cause when rejecting an invalid matrix pair', () {
+      const secret = 'invalid-matrix-secret';
+      final cause = _SensitiveCause(secret);
+
+      final error = _captureArgumentError(
+        () => KachePersistenceException(
+          operation: KachePersistenceOperation.close,
+          stage: KachePersistenceStage.decode,
+          cause: cause,
+          stackTrace: StackTrace.current,
+        ),
+      );
+
+      expect(error.toString(), isNot(contains(secret)));
+      expect(cause.wasRendered, isFalse);
+    });
   });
 }
+
+const _validPersistenceStages =
+    <KachePersistenceOperation, Set<KachePersistenceStage>>{
+      KachePersistenceOperation.read: {
+        KachePersistenceStage.backend,
+        KachePersistenceStage.decode,
+        KachePersistenceStage.migration,
+      },
+      KachePersistenceOperation.write: {
+        KachePersistenceStage.backend,
+        KachePersistenceStage.encode,
+      },
+      KachePersistenceOperation.delete: {KachePersistenceStage.backend},
+      KachePersistenceOperation.clearNamespace: {KachePersistenceStage.backend},
+      KachePersistenceOperation.clear: {KachePersistenceStage.backend},
+      KachePersistenceOperation.close: {KachePersistenceStage.backend},
+    };
 
 final class _Binding<T> extends KachePersistenceBinding<T> {
   _Binding({required super.backend, required super.fingerprint});
@@ -353,7 +489,7 @@ final class _Binding<T> extends KachePersistenceBinding<T> {
 final class _FakeBackend implements KachePersistenceBackend {
   final Map<KacheKey, _StoredEntry> _entries = <KacheKey, _StoredEntry>{};
 
-  Future<void>? maintenance;
+  KachePersistenceMaintenance? maintenance;
   int clearCount = 0;
   int closeCount = 0;
 
@@ -392,9 +528,9 @@ final class _FakeBackend implements KachePersistenceBackend {
   }
 
   @override
-  Future<void> clearNamespace({required String namespacePrefix}) async {
+  Future<void> clearNamespace({required KacheNamespace namespace}) async {
     _entries.removeWhere(
-      (key, _) => key.storageKey.startsWith(namespacePrefix),
+      (key, _) => key.storageKey.startsWith(namespace.storagePrefix),
     );
   }
 
@@ -445,4 +581,13 @@ KachePersistenceBindingException _captureBindingException(
     return error;
   }
   fail('Expected KachePersistenceBindingException.');
+}
+
+ArgumentError _captureArgumentError(void Function() action) {
+  try {
+    action();
+  } on ArgumentError catch (error) {
+    return error;
+  }
+  fail('Expected ArgumentError.');
 }
