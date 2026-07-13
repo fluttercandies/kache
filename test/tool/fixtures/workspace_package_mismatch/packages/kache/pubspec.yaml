@@ -1,0 +1,8 @@
+name: workspace_package_mismatch_core
+description: First workspace member used by the package mismatch fixture.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace

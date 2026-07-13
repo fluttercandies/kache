@@ -1,0 +1,15 @@
+name: kache_flutter
+description: Fixture using a git source for a workspace dependency.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kache:
+    git: https://example.invalid/kache.git

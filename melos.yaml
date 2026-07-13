@@ -1,8 +1,16 @@
 name: kache
 
 packages:
-  - packages/*
-  - examples/*
+  - packages/kache
+  - packages/kache_flutter
+  - packages/kache_hive_ce
+  - packages/kache_riverpod
+  - packages/kache_bloc
+  - packages/kache_provider
+  - examples/kache_flutter_example
+  - examples/kache_riverpod_example
+  - examples/kache_bloc_example
+  - examples/kache_provider_example
   - tool/contract_tests
 
 scripts:

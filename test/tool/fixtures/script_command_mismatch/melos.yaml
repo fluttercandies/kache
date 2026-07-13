@@ -1,0 +1,8 @@
+name: script_command_mismatch_fixture
+
+packages:
+  - packages/kache
+
+scripts:
+  test:
+    run: dart test

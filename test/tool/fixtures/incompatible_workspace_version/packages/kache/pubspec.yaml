@@ -1,0 +1,8 @@
+name: kache
+description: Workspace dependency version fixture target.
+version: 0.2.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace

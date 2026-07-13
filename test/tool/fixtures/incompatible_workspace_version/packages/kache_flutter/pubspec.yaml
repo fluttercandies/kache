@@ -1,0 +1,13 @@
+name: kache_flutter
+description: Fixture with a constraint that excludes the workspace target.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kache: ^0.1.0

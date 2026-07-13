@@ -1,0 +1,9 @@
+name: incompatible_workspace_version_fixture
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+workspace:
+  - packages/kache
+  - packages/kache_flutter

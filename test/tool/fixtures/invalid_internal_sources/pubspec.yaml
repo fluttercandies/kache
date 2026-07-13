@@ -1,0 +1,12 @@
+name: invalid_internal_sources_fixture
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+workspace:
+  - packages/kache
+  - packages/kache_flutter
+  - packages/kache_hive_ce
+  - packages/kache_riverpod
+  - packages/kache_bloc

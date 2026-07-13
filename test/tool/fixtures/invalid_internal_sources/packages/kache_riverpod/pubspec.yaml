@@ -1,0 +1,13 @@
+name: kache_riverpod
+description: Fixture using an SDK source for a workspace dependency.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  kache:
+    sdk: flutter
+  riverpod: ^3.3.2

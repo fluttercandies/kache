@@ -1,0 +1,12 @@
+name: kache_bloc
+description: Fixture using an empty constraint for a workspace dependency.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  bloc: ^9.2.1
+  kache: ''

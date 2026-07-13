@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:pub_semver/pub_semver.dart';
 import 'package:yaml/yaml.dart';
 
 const Map<String, Set<String>> allowedRuntimeDependencies = {
@@ -138,6 +139,11 @@ List<String> checkMelosScriptManifest({
     source: '${melosFile.path}: scripts',
     errors: errors,
   );
+  final scriptRuns = _readScriptRuns(
+    scripts,
+    source: melosFile.uri.pathSegments.last,
+    errors: errors,
+  );
   final requiredScripts = _readStringList(
     manifest['scripts'],
     source: '${manifestFile.path}: scripts',
@@ -172,6 +178,11 @@ List<String> checkMelosScriptManifest({
         source: '${workspacePubspecFile.path}: melos.scripts',
         errors: errors,
       );
+      final workspaceScriptRuns = _readScriptRuns(
+        workspaceScripts,
+        source: workspacePubspecFile.uri.pathSegments.last,
+        errors: errors,
+      );
       for (final script in requiredSet) {
         if (!workspaceScripts.containsKey(script)) {
           errors.add(
@@ -187,6 +198,40 @@ List<String> checkMelosScriptManifest({
             'manifest.',
           );
         }
+      }
+      for (final script in requiredSet) {
+        final mirrorRun = scriptRuns[script];
+        final workspaceRun = workspaceScriptRuns[script];
+        if (mirrorRun != null &&
+            workspaceRun != null &&
+            mirrorRun != workspaceRun) {
+          errors.add(
+            'Melos script "$script" has different run commands in '
+            '${melosFile.uri.pathSegments.last} and '
+            '${workspacePubspecFile.uri.pathSegments.last}.',
+          );
+        }
+      }
+
+      final mirroredPackages = _readStringList(
+        melos['packages'],
+        source: '${melosFile.path}: packages',
+        errors: errors,
+      ).toSet();
+      final workspacePackages = _readStringList(
+        pubspec['workspace'],
+        source: '${workspacePubspecFile.path}: workspace',
+        errors: errors,
+      ).toSet();
+      for (final package in workspacePackages.difference(mirroredPackages)) {
+        errors.add(
+          'Melos package mirror is missing workspace member "$package".',
+        );
+      }
+      for (final package in mirroredPackages.difference(workspacePackages)) {
+        errors.add(
+          'Melos package mirror declares non-workspace member "$package".',
+        );
       }
     }
   }
@@ -212,16 +257,43 @@ void _checkWorkspaceGraph(
         errors: errors,
       );
       for (final dependency in dependencyMap.entries) {
-        if (!packages.containsKey(dependency.key)) {
+        final targetPackage = packages[dependency.key];
+        if (targetPackage == null) {
           continue;
         }
         dependencies.add(dependency.key);
         final specification = dependency.value;
-        if (specification is Map<Object?, Object?> &&
-            specification.containsKey('path')) {
+        if (specification is! String || specification.trim().isEmpty) {
           errors.add(
-            '${entry.key} must use a version constraint for workspace '
-            'dependency "${dependency.key}", not a path dependency.',
+            '${entry.key} workspace dependency "${dependency.key}" must use '
+            'a non-empty string version constraint.',
+          );
+          continue;
+        }
+
+        final targetVersionText = targetPackage.yaml['version'];
+        if (targetVersionText is! String || targetVersionText.isEmpty) {
+          errors.add(
+            'Workspace package "${dependency.key}" must declare a semantic '
+            'version before other workspace packages can depend on it.',
+          );
+          continue;
+        }
+
+        try {
+          final constraint = VersionConstraint.parse(specification);
+          final targetVersion = Version.parse(targetVersionText);
+          if (!constraint.allows(targetVersion)) {
+            errors.add(
+              '${entry.key} dependency "${dependency.key}" constraint '
+              '"$specification" does not allow workspace version '
+              '$targetVersionText.',
+            );
+          }
+        } on FormatException catch (error) {
+          errors.add(
+            '${entry.key} dependency "${dependency.key}" has invalid '
+            'version metadata: ${error.message}.',
           );
         }
       }
@@ -316,6 +388,26 @@ Map<String, Object?> _readStringKeyMap(
       result[key] = entry.value;
     } else {
       errors.add('$source keys must be non-empty strings.');
+    }
+  }
+  return result;
+}
+
+Map<String, String> _readScriptRuns(
+  Map<String, Object?> scripts, {
+  required String source,
+  required List<String> errors,
+}) {
+  final result = <String, String>{};
+  for (final entry in scripts.entries) {
+    final value = entry.value;
+    final Object? run = value is Map<Object?, Object?> ? value['run'] : value;
+    if (run is String && run.trim().isNotEmpty) {
+      result[entry.key] = run.trim();
+    } else {
+      errors.add(
+        '$source script "${entry.key}" must define a non-empty run command.',
+      );
     }
   }
   return result;

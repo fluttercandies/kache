@@ -1,0 +1,8 @@
+name: workspace_package_mismatch_fixture
+
+packages:
+  - packages/extra
+  - packages/kache
+
+scripts:
+  test: dart test

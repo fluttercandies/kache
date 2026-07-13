@@ -1,0 +1,8 @@
+name: script_command_mismatch_package
+description: Workspace member used by the script mismatch fixture.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
