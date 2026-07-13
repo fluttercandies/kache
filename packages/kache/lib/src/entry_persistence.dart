@@ -4,6 +4,11 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
   Future<void> _readPersistence(KacheQuery<T> query) async {
     final version = _captureVersion();
     _didReadPersistence = true;
+    client._emitEvent(
+      kind: KacheEventKind.persistenceReadStarted,
+      key: key,
+      debugName: query.debugName,
+    );
     _setPersistence(
       const KachePersistenceState.reading(),
       emptyPhase: KachePhase.loading,
@@ -28,6 +33,11 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
     if (client.isClosed || !_isCurrent(version)) {
       return;
     }
+    client._emitEvent(
+      kind: KacheEventKind.persistenceReadSucceeded,
+      key: key,
+      debugName: query.debugName,
+    );
     if (read == null) {
       _setPersistence(const KachePersistenceState.absent());
       return;
@@ -67,20 +77,30 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
     try {
       final executed = await _writes.schedule(
         isValid: () => _isCurrent(version),
-        operation: () => client.persistence!.write<T>(
-          key: key,
-          binding: binding!,
-          entry: KachePersistedEntry<T>(
-            data: data,
-            metadata: KachePersistedMetadata(
-              fetchedAt: fetchedAt,
-              isInvalidated: isInvalidated,
+        operation: () {
+          client._emitEvent(
+            kind: KacheEventKind.persistenceWriteStarted,
+            key: key,
+          );
+          return client.persistence!.write<T>(
+            key: key,
+            binding: binding!,
+            entry: KachePersistedEntry<T>(
+              data: data,
+              metadata: KachePersistedMetadata(
+                fetchedAt: fetchedAt,
+                isInvalidated: isInvalidated,
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
       if (executed && _isCurrent(version)) {
         _setPersistence(const KachePersistenceState.persisted());
+        client._emitEvent(
+          kind: KacheEventKind.persistenceWriteSucceeded,
+          key: key,
+        );
       }
     } on Object catch (error, stackTrace) {
       if (_isCurrent(version)) {
@@ -116,10 +136,20 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
     try {
       final executed = await _writes.schedule(
         isValid: () => _isCurrent(version),
-        operation: read.runMaintenance,
+        operation: () {
+          client._emitEvent(
+            kind: KacheEventKind.persistenceWriteStarted,
+            key: key,
+          );
+          return read.runMaintenance();
+        },
       );
       if (executed && _isCurrent(version)) {
         _setPersistence(const KachePersistenceState.persisted());
+        client._emitEvent(
+          kind: KacheEventKind.persistenceWriteSucceeded,
+          key: key,
+        );
       }
     } on Object catch (error, stackTrace) {
       if (_isCurrent(version)) {

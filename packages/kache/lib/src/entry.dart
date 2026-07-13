@@ -142,7 +142,11 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         cause: const KacheFetchUnavailableException(),
         stackTrace: StackTrace.current,
       );
-      _emitOperationFailure(failure, query.policy.retainDataOnError);
+      _emitOperationFailure(
+        failure,
+        query.policy.retainDataOnError,
+        debugName: query.debugName,
+      );
       return Future<KacheSnapshot<T>>.value(_snapshot);
     }
     return _fetch(query, fetcher);
@@ -167,7 +171,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         await maintenance;
       }
       if (!_snapshot.hasData) {
-        _emitCacheMiss();
+        _emitCacheMiss(debugName: query.debugName);
       }
       return _snapshot;
     }
@@ -251,6 +255,11 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     final version = _captureVersion();
     final cancellation = KacheCancellationController();
     _fetchCancellation = cancellation;
+    client._emitEvent(
+      kind: KacheEventKind.fetchStarted,
+      key: key,
+      debugName: query.debugName,
+    );
     if (_snapshot.hasData) {
       _emitReady(
         data: _snapshot.requireData,
@@ -284,6 +293,11 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         fetchedAt: fetchedAt,
         persistence: persistence,
       );
+      client._emitEvent(
+        kind: KacheEventKind.fetchSucceeded,
+        key: key,
+        debugName: query.debugName,
+      );
       if (storageMode == KacheStorageMode.persisted) {
         await _writePersisted(
           data,
@@ -304,7 +318,11 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         cause: error,
         stackTrace: stackTrace,
       );
-      _emitOperationFailure(failure, query.policy.retainDataOnError);
+      _emitOperationFailure(
+        failure,
+        query.policy.retainDataOnError,
+        debugName: query.debugName,
+      );
     }
     return _snapshot;
   }

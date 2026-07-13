@@ -1,7 +1,10 @@
 part of 'client.dart';
 
 extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
-  Future<KacheSnapshot<T>> setData(T data) async {
+  Future<KacheSnapshot<T>> setData(
+    T data, {
+    required KacheQuery<T> query,
+  }) async {
     _ensureCommandAvailable();
     _advanceGeneration();
     final version = _captureVersion();
@@ -16,6 +19,11 @@ extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
           ? const KachePersistenceState.writing()
           : null,
     );
+    client._emitEvent(
+      kind: KacheEventKind.dataSet,
+      key: key,
+      debugName: query.debugName,
+    );
     if (storageMode == KacheStorageMode.persisted) {
       await _writePersisted(
         data,
@@ -25,6 +33,15 @@ extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
       );
     }
     return _snapshot;
+  }
+
+  Future<KacheSnapshot<T>> updateData(
+    T Function(KacheSnapshot<T> snapshot) update, {
+    required KacheQuery<T> query,
+  }) {
+    _ensureCommandAvailable();
+    final data = update(_snapshot);
+    return setData(data, query: query);
   }
 
   Future<KacheSnapshot<T>> invalidate(
@@ -56,6 +73,11 @@ extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
         );
       }
     }
+    client._emitEvent(
+      kind: KacheEventKind.invalidated,
+      key: key,
+      debugName: query.debugName,
+    );
     if (refetch) {
       return refresh(query);
     }
@@ -74,6 +96,7 @@ extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
     } else {
       _emitEmpty(null);
     }
+    client._emitEvent(kind: KacheEventKind.removed, key: key);
     return _snapshot;
   }
 }

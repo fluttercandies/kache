@@ -80,7 +80,15 @@ final class KacheResource<T> implements _KacheResourceBase {
   /// Replaces current data immediately and persists it when configured.
   Future<KacheSnapshot<T>> setData(T data) {
     _ensureActive();
-    return _entry.setData(data);
+    return _entry.setData(data, query: query);
+  }
+
+  /// Atomically computes and stores data from the latest shared snapshot.
+  Future<KacheSnapshot<T>> updateData(
+    T Function(KacheSnapshot<T> snapshot) update,
+  ) {
+    _ensureActive();
+    return _entry.updateData(update, query: query);
   }
 
   /// Marks current data stale and optionally starts a fresh fetch.

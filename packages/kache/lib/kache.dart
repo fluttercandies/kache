@@ -5,6 +5,7 @@ export 'src/cancellation.dart';
 export 'src/client.dart';
 export 'src/clock.dart';
 export 'src/command.dart';
+export 'src/event.dart';
 export 'src/failure.dart';
 export 'src/key.dart';
 export 'src/memory_persistence.dart';

@@ -1,17 +1,23 @@
 part of 'client.dart';
 
 extension _KacheEntrySnapshotExtensions<T> on _KacheEntry<T> {
-  void _emitCacheMiss() {
+  void _emitCacheMiss({String? debugName}) {
     final failure = KacheFailure(
       kind: KacheFailureKind.cacheMiss,
       key: key,
       cause: const KacheCacheMissException(),
       stackTrace: StackTrace.current,
     );
+    client._reportFailure(failure, debugName: debugName);
     _emitFailed(failure, _snapshot.persistence);
   }
 
-  void _emitOperationFailure(KacheFailure failure, bool retainData) {
+  void _emitOperationFailure(
+    KacheFailure failure,
+    bool retainData, {
+    String? debugName,
+  }) {
+    client._reportFailure(failure, debugName: debugName);
     if (_snapshot.hasData && retainData) {
       _emitReady(
         data: _snapshot.requireData,
@@ -54,6 +60,10 @@ extension _KacheEntrySnapshotExtensions<T> on _KacheEntry<T> {
     KachePersistenceState persistence, {
     KachePhase emptyPhase = KachePhase.idle,
   }) {
+    final failure = persistence.failure;
+    if (failure != null) {
+      client._reportFailure(failure);
+    }
     if (_snapshot.hasData) {
       _emitReady(
         data: _snapshot.requireData,

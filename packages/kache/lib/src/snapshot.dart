@@ -1,3 +1,4 @@
+import 'command.dart';
 import 'failure.dart';
 import 'policy.dart';
 
@@ -239,6 +240,22 @@ final class KacheSnapshot<T> {
 
   /// Persistence status for persisted queries, otherwise `null`.
   final KachePersistenceState? persistence;
+
+  /// Throws [KacheCommandException] when this snapshot contains failures.
+  void throwIfFailed() {
+    final failures = <KacheFailure>[];
+    final primary = failure;
+    if (primary != null) {
+      failures.add(primary);
+    }
+    final persistenceFailure = persistence?.failure;
+    if (persistenceFailure != null && !identical(persistenceFailure, primary)) {
+      failures.add(persistenceFailure);
+    }
+    if (failures.isNotEmpty) {
+      throw KacheCommandException(failures);
+    }
+  }
 
   @override
   String toString() =>

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'cancellation.dart';
 import 'clock.dart';
 import 'command.dart';
+import 'event.dart';
 import 'failure.dart';
 import 'key.dart';
 import 'persistence.dart';
@@ -29,8 +30,10 @@ final class KacheClient {
     this.persistenceOwnership = KachePersistenceOwnership.borrowed,
     KacheClock clock = systemKacheClock,
     KacheScheduler scheduler = systemKacheScheduler,
+    KacheObserver? observer,
   }) : _clock = clock,
-       _scheduler = scheduler {
+       _scheduler = scheduler,
+       _observer = observer {
     if (persistence == null &&
         persistenceOwnership == KachePersistenceOwnership.owned) {
       throw const KacheConfigurationException(
@@ -48,6 +51,9 @@ final class KacheClient {
 
   final KacheClock _clock;
   final KacheScheduler _scheduler;
+  final KacheObserver? _observer;
+  final StreamController<KacheEvent> _events =
+      StreamController<KacheEvent>.broadcast(sync: true);
   final Map<String, _KacheEntryBase> _entries = <String, _KacheEntryBase>{};
   final Set<_KacheResourceBase> _resources = <_KacheResourceBase>{};
   final Map<String, int> _namespaceEpochs = <String, int>{};
@@ -58,6 +64,9 @@ final class KacheClient {
 
   /// Whether [close] has started.
   bool get isClosed => _isClosed;
+
+  /// Broadcast cache lifecycle events without replaying payload data.
+  Stream<KacheEvent> get events => _events.stream;
 
   /// Creates an independent resource handle for [query].
   ///
@@ -87,6 +96,32 @@ final class KacheClient {
     return resource;
   }
 
+  /// Loads [query] without retaining a public resource handle.
+  Future<KacheSnapshot<T>> prefetch<T>(KacheQuery<T> query) async {
+    final resource = watch(query);
+    try {
+      return await resource.load();
+    } finally {
+      resource.dispose();
+    }
+  }
+
+  /// Returns the active in-memory snapshot for [key] without I/O or loading.
+  KacheSnapshot<T>? peek<T>(KacheKey key) {
+    _ensureOpen();
+    final existing = _entries[key.storageKey];
+    if (existing == null) {
+      return null;
+    }
+    if (existing.valueType != T) {
+      throw const KacheConfigurationException(
+        'key_type_conflict',
+        'The active cache key is registered for another value type.',
+      );
+    }
+    return (existing as _KacheEntry<T>).snapshot;
+  }
+
   /// Closes resources and, when owned, the configured persistence backend.
   ///
   /// Repeated calls return the same completion future.
@@ -107,6 +142,7 @@ final class KacheClient {
     bool refetch = false,
   }) {
     _ensureOpen();
+    _emitEvent(kind: KacheEventKind.clearStarted, namespace: namespace);
     _namespaceEpochs.update(
       namespace.value,
       (value) => value + 1,
@@ -130,6 +166,7 @@ final class KacheClient {
   /// Clears every active memory and persisted cache entry.
   Future<KacheClearResult> clear({bool refetch = false}) {
     _ensureOpen();
+    _emitEvent(kind: KacheEventKind.clearStarted);
     _globalEpoch += 1;
     final entries = _entries.values.toList(growable: false);
     for (final entry in entries) {
@@ -152,6 +189,40 @@ final class KacheClient {
   bool _isEpochCurrent(KacheKey key, _KacheOperationVersion version) =>
       version.globalEpoch == _globalEpoch &&
       version.namespaceEpoch == (_namespaceEpochs[key.namespace] ?? 0);
+
+  void _emitEvent({
+    required KacheEventKind kind,
+    KacheKey? key,
+    KacheNamespace? namespace,
+    String? debugName,
+    KacheFailure? failure,
+  }) {
+    if (_events.isClosed) {
+      return;
+    }
+    final event = KacheEvent(
+      kind: kind,
+      occurredAt: _now(),
+      key: key,
+      namespace: namespace,
+      debugName: debugName,
+      failure: failure,
+    );
+    try {
+      _observer?.call(event);
+    } on Object {
+      // Observer failures are isolated from the cache state machine.
+    }
+    _events.add(event);
+  }
+
+  void _reportFailure(KacheFailure failure, {String? debugName}) => _emitEvent(
+    kind: KacheEventKind.failure,
+    key: failure.key,
+    namespace: failure.namespace,
+    debugName: debugName,
+    failure: failure,
+  );
 
   void _ensureOpen() {
     if (_isClosed) {
@@ -244,6 +315,7 @@ final class KacheClient {
           namespace: namespace,
         );
         failures.add(failure);
+        _reportFailure(failure);
         for (final entry in entries) {
           entry.reportClearFailure(failure);
         }
@@ -264,6 +336,7 @@ final class KacheClient {
         resources.map((resource) => resource.revalidateAfterClear()),
       );
     }
+    _emitEvent(kind: KacheEventKind.clearCompleted, namespace: namespace);
     return KacheClearResult(failures: failures);
   }
 
@@ -329,8 +402,13 @@ final class KacheClient {
     for (final entry in entries) {
       await entry.finishClose();
     }
-    if (persistenceOwnership == KachePersistenceOwnership.owned) {
-      await persistence!.close();
+    try {
+      if (persistenceOwnership == KachePersistenceOwnership.owned) {
+        await persistence!.close();
+      }
+    } finally {
+      _emitEvent(kind: KacheEventKind.clientClosed);
+      await _events.close();
     }
   }
 }
