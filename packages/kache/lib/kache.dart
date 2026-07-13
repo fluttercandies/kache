@@ -2,3 +2,4 @@
 library;
 
 export 'src/key.dart';
+export 'src/persistence.dart';
