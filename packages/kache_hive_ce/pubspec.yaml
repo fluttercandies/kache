@@ -10,3 +10,6 @@ resolution: workspace
 dependencies:
   hive_ce: ^2.19.3
   kache: ^0.1.0
+
+dev_dependencies:
+  test: 1.30.0
