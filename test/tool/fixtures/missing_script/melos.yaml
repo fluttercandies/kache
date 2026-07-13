@@ -1,0 +1,7 @@
+name: missing_script_fixture
+
+packages:
+  - packages/*
+
+scripts:
+  test: dart test

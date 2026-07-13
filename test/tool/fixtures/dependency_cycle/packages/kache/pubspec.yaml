@@ -1,0 +1,11 @@
+name: kache
+description: Fixture package that introduces a dependency cycle.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  kache_flutter: ^0.1.0

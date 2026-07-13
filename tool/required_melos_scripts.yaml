@@ -1,0 +1,23 @@
+scripts:
+  - analyze:examples
+  - api-check
+  - benchmark
+  - compatibility-check
+  - dependency-boundaries
+  - docs
+  - publish-dry-run
+  - source-marker-check
+  - test
+  - test:adapter-contracts
+  - test:bloc
+  - test:core-failure-injection
+  - test:core-lifecycle
+  - test:examples
+  - test:failure-injection
+  - test:hive
+  - test:integration
+  - test:lifecycle
+  - test:persistence-contracts
+  - test:readme
+  - test:riverpod
+  - verify:script-manifest

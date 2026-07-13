@@ -1,0 +1,12 @@
+name: kache_hive_ce
+description: Hive CE persistence integration for the Kache caching library.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  hive_ce: ^2.19.3
+  kache: ^0.1.0

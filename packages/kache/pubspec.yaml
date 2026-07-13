@@ -1,0 +1,8 @@
+name: kache
+description: Type-safe stale-while-revalidate caching primitives for Dart applications.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace

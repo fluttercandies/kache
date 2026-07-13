@@ -1,0 +1,24 @@
+name: kache_contract_tests
+description: Shared non-published contract tests for Kache packages and adapters.
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.35.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kache: ^0.1.0
+  kache_bloc: ^0.1.0
+  kache_flutter: ^0.1.0
+  kache_hive_ce: ^0.1.0
+  kache_provider: ^0.1.0
+  kache_riverpod: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: 1.30.0

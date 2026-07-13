@@ -1,0 +1,74 @@
+name: kache
+
+packages:
+  - packages/*
+  - examples/*
+  - tool/contract_tests
+
+scripts:
+  test:
+    description: Run every package test suite that currently has tests.
+    run: melos exec --dir-exists=test -- "flutter test"
+  test:integration:
+    description: Run Flutter integration test suites.
+    run: melos exec --dir-exists=integration_test -- "flutter test integration_test"
+  test:persistence-contracts:
+    description: Run the reusable persistence contract matrix.
+    run: melos exec --scope=kache_contract_tests -- flutter test test/persistence_contract_test.dart
+  test:hive:
+    description: Run the Hive CE adapter test suite.
+    run: melos exec --scope=kache_hive_ce -- dart test
+  test:riverpod:
+    description: Run the Riverpod adapter test suite.
+    run: melos exec --scope=kache_riverpod -- dart test
+  test:bloc:
+    description: Run the Bloc adapter test suite.
+    run: melos exec --scope=kache_bloc -- dart test
+  test:core-failure-injection:
+    description: Run core failure injection scenarios.
+    run: melos exec --scope=kache -- dart test test/failure_injection_test.dart
+  test:core-lifecycle:
+    description: Run core lifecycle stress scenarios.
+    run: melos exec --scope=kache -- dart test test/lifecycle_stress_test.dart
+  test:adapter-contracts:
+    description: Run the cross-adapter behavior matrix.
+    run: melos exec --scope=kache_contract_tests -- flutter test test/adapter_contract_test.dart
+  test:examples:
+    description: Run all Flutter example test suites.
+    run: melos exec --scope="*_example" --dir-exists=test -- flutter test
+  test:failure-injection:
+    description: Run all failure injection validation suites.
+    run: melos run test:core-failure-injection && melos run test:hive && melos run test:adapter-contracts
+  test:lifecycle:
+    description: Run all lifecycle validation suites.
+    run: melos run test:core-lifecycle && melos run test:adapter-contracts && melos run test:examples
+  analyze:examples:
+    description: Analyze all Flutter example applications.
+    run: melos exec --scope="*_example" -- flutter analyze
+  docs:
+    description: Generate API documentation for every published package.
+    run: melos exec --no-private -- dart doc
+  test:readme:
+    description: Compile and validate documented examples.
+    run: dart test test/readme_examples_test.dart
+  api-check:
+    description: Validate the public API surface.
+    run: dart test test/api_compatibility_test.dart
+  compatibility-check:
+    description: Validate the supported dependency version matrix.
+    run: dart test test/version_compatibility_test.dart
+  benchmark:
+    description: Run the core and persistence benchmark suite.
+    run: melos exec --scope=kache -- dart run benchmark/kache_benchmark.dart
+  dependency-boundaries:
+    description: Validate package dependencies and detect workspace cycles.
+    run: dart run tool/check_dependency_boundaries.dart
+  verify:script-manifest:
+    description: Ensure every required verification script is declared.
+    run: dart run tool/check_melos_scripts.dart
+  source-marker-check:
+    description: Reject unfinished source markers from production code.
+    run: dart run tool/check_source_markers.dart
+  publish-dry-run:
+    description: Run a publication dry run for all publishable packages.
+    run: melos exec --no-private -- "dart pub publish --dry-run"

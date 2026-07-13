@@ -1,0 +1,8 @@
+name: invalid_dependency_fixture
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+
+workspace:
+  - packages/kache

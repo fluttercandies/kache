@@ -1,0 +1,11 @@
+name: kache_flutter
+description: Fixture package that closes a dependency cycle.
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.0
+
+resolution: workspace
+
+dependencies:
+  kache: ^0.1.0
