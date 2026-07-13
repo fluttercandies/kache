@@ -2,6 +2,7 @@
 library;
 
 export 'src/cancellation.dart';
+export 'src/client.dart';
 export 'src/clock.dart';
 export 'src/failure.dart';
 export 'src/key.dart';

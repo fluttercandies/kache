@@ -98,3 +98,37 @@ final class KacheConfigurationException implements Exception {
   @override
   String toString() => 'KacheConfigurationException($code): $message';
 }
+
+/// Thrown when an operation targets a disposed resource or closed client.
+final class KacheLifecycleException implements Exception {
+  /// Creates a sanitized lifecycle exception with a stable [code].
+  const KacheLifecycleException(this.code, this.message);
+
+  /// A stable machine-readable reason.
+  final String code;
+
+  /// A non-sensitive explanation.
+  final String message;
+
+  @override
+  String toString() => 'KacheLifecycleException($code): $message';
+}
+
+/// Cause used by [KacheFailureKind.cacheMiss].
+final class KacheCacheMissException implements Exception {
+  /// Creates a cache-miss exception.
+  const KacheCacheMissException();
+
+  @override
+  String toString() => 'KacheCacheMissException: No usable cache data exists.';
+}
+
+/// Cause used when an explicit refresh has no configured fetcher.
+final class KacheFetchUnavailableException implements Exception {
+  /// Creates a fetch-unavailable exception.
+  const KacheFetchUnavailableException();
+
+  @override
+  String toString() =>
+      'KacheFetchUnavailableException: No fetcher is configured.';
+}
