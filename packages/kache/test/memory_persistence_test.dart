@@ -83,36 +83,36 @@ void main() {
       },
     );
 
-    test(
-      'checks binding ownership before closed state for read and write',
-      () async {
-        final backend = MemoryKachePersistence();
-        final otherBackend = MemoryKachePersistence();
-        final foreignBinding = otherBackend.bind<String>(
-          fingerprint: 'string-v1',
-        );
-        final key = KacheKey('binding-first');
-        await backend.close();
+    test('reports closed state before foreign binding ownership', () async {
+      final backend = MemoryKachePersistence();
+      final otherBackend = MemoryKachePersistence();
+      final foreignBinding = otherBackend.bind<String>(
+        fingerprint: 'string-v1',
+      );
+      final key = KacheKey('closed-before-binding');
+      await backend.close();
 
-        await expectLater(
-          backend.read<String>(key: key, binding: foreignBinding),
-          throwsA(isA<KachePersistenceBindingException>()),
-        );
-        await expectLater(
-          backend.write<String>(
-            key: key,
-            binding: foreignBinding,
-            entry: KachePersistedEntry<String>(
-              data: 'value',
-              metadata: KachePersistedMetadata(
-                fetchedAt: DateTime.utc(2026, 7, 14),
-              ),
+      final readError = await _capturePersistenceException(
+        backend.read<String>(key: key, binding: foreignBinding),
+      );
+      final writeError = await _capturePersistenceException(
+        backend.write<String>(
+          key: key,
+          binding: foreignBinding,
+          entry: KachePersistedEntry<String>(
+            data: 'value',
+            metadata: KachePersistedMetadata(
+              fetchedAt: DateTime.utc(2026, 7, 14),
             ),
           ),
-          throwsA(isA<KachePersistenceBindingException>()),
-        );
-      },
-    );
+        ),
+      );
+
+      expect(readError.operation, KachePersistenceOperation.read);
+      expect(readError.stage, KachePersistenceStage.backend);
+      expect(writeError.operation, KachePersistenceOperation.write);
+      expect(writeError.stage, KachePersistenceStage.backend);
+    });
   });
 }
 

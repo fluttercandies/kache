@@ -28,8 +28,8 @@ melos:
   scripts:
     test: 'melos exec --dir-exists=test -- "flutter test"'
     test:integration: 'melos exec --dir-exists=integration_test -- "flutter test integration_test"'
-    test:persistence-contracts: 'melos exec --scope=kache_contract_tests -- flutter test test/persistence_contract_test.dart'
-    test:hive: 'melos exec --scope=kache_hive_ce -- dart test'
+    test:persistence-contracts: 'melos exec --scope=kache_contract_tests -- dart test test/persistence_contract_test.dart && melos exec --scope=kache_contract_tests -- dart test -p chrome test/persistence_contract_test.dart'
+    test:hive: 'melos exec --scope=kache_hive_ce --dir-exists=test -- dart test && melos run test:persistence-contracts'
     test:riverpod: 'melos exec --scope=kache_riverpod -- dart test'
     test:bloc: 'melos exec --scope=kache_bloc -- dart test'
     test:core-failure-injection: 'melos exec --scope=kache -- dart test test/failure_injection_test.dart'

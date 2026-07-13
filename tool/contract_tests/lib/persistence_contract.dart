@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:kache/kache.dart';
 import 'package:test/test.dart';
 
-/// Creates bindings and exposes one real backend for persistence contracts.
+/// Creates bindings and exposes one real backend to the central aggregator.
 abstract interface class PersistenceContractHarness {
   /// The backend instance under test.
   KachePersistenceBackend get backend;
@@ -22,8 +22,9 @@ typedef PersistenceContractHarnessFactory =
 /// Registers the reusable persistence behavior matrix for one backend.
 ///
 /// Each scenario uses a fresh harness and exercises the real backend rather
-/// than a mocking framework. Backend packages can invoke this runner from
-/// their tests while keeping the behavior definitions centralized here.
+/// than a mocking framework. Only the `tool/contract_tests` aggregator
+/// registers backend harnesses. Adapter packages do not import this test
+/// package; the dependency direction remains from the aggregator to adapters.
 void runPersistenceContract({
   required String backendName,
   required PersistenceContractHarnessFactory createHarness,
@@ -188,14 +189,24 @@ void runPersistenceContract({
       );
     });
 
-    test('rejects a binding owned by another backend', () async {
+    test('rejects a foreign binding while open', () async {
       final harness = await _createHarness(createHarness);
       final other = await _createHarness(createHarness);
+      final foreignBinding = other.bind<String>(fingerprint: 'string-v1');
+      final key = KacheKey('binding-mismatch');
 
       await expectLater(
-        harness.backend.read<String>(
-          key: KacheKey('binding-mismatch'),
-          binding: other.bind<String>(fingerprint: 'string-v1'),
+        harness.backend.read<String>(key: key, binding: foreignBinding),
+        throwsA(isA<KachePersistenceBindingException>()),
+      );
+      await expectLater(
+        harness.backend.write<String>(
+          key: key,
+          binding: foreignBinding,
+          entry: KachePersistedEntry<String>(
+            data: 'value',
+            metadata: _metadata(),
+          ),
         ),
         throwsA(isA<KachePersistenceBindingException>()),
       );
@@ -212,18 +223,14 @@ void runPersistenceContract({
         await _writeString(harness, key, original, 'value');
         final mismatched = harness.bind<String>(fingerprint: 'string-v2');
 
-        final error = await _capturePersistenceFailure(
-          operation == KachePersistenceOperation.read
-              ? () async {
-                  await harness.backend.read<String>(
-                    key: key,
-                    binding: mismatched,
-                  );
-                }
-              : () async {
-                  await _writeString(harness, key, mismatched, 'replacement');
-                },
-        );
+        final error = operation == KachePersistenceOperation.read
+            ? await _capturePersistenceFailure(
+                () =>
+                    harness.backend.read<String>(key: key, binding: mismatched),
+              )
+            : await _capturePersistenceFailure(
+                () => _writeString(harness, key, mismatched, 'replacement'),
+              );
 
         _expectBackendFailure(error, operation);
       });
@@ -235,25 +242,20 @@ void runPersistenceContract({
         await _writeString(harness, key, original, 'value');
         final mismatched = harness.bind<int>(fingerprint: 'shared-v1');
 
-        final error = await _capturePersistenceFailure(
-          operation == KachePersistenceOperation.read
-              ? () async {
-                  await harness.backend.read<int>(
-                    key: key,
-                    binding: mismatched,
-                  );
-                }
-              : () async {
-                  await harness.backend.write<int>(
-                    key: key,
-                    binding: mismatched,
-                    entry: KachePersistedEntry<int>(
-                      data: 2,
-                      metadata: _metadata(),
-                    ),
-                  );
-                },
-        );
+        final error = operation == KachePersistenceOperation.read
+            ? await _capturePersistenceFailure(
+                () => harness.backend.read<int>(key: key, binding: mismatched),
+              )
+            : await _capturePersistenceFailure(
+                () => harness.backend.write<int>(
+                  key: key,
+                  binding: mismatched,
+                  entry: KachePersistedEntry<int>(
+                    data: 2,
+                    metadata: _metadata(),
+                  ),
+                ),
+              );
 
         _expectBackendFailure(error, operation);
       });
@@ -266,6 +268,31 @@ void runPersistenceContract({
       await harness.backend.close();
     });
 
+    test('prioritizes closed state over foreign binding ownership', () async {
+      final harness = await _createHarness(createHarness);
+      final other = await _createHarness(createHarness);
+      final foreignBinding = other.bind<String>(fingerprint: 'string-v1');
+      final key = KacheKey('closed-before-binding');
+      await harness.backend.close();
+
+      final readError = await _capturePersistenceFailure(
+        () => harness.backend.read<String>(key: key, binding: foreignBinding),
+      );
+      final writeError = await _capturePersistenceFailure(
+        () => harness.backend.write<String>(
+          key: key,
+          binding: foreignBinding,
+          entry: KachePersistedEntry<String>(
+            data: 'value',
+            metadata: _metadata(),
+          ),
+        ),
+      );
+
+      _expectBackendFailure(readError, KachePersistenceOperation.read);
+      _expectBackendFailure(writeError, KachePersistenceOperation.write);
+    });
+
     for (final operation in _operationsAfterClose) {
       test('classifies $operation after close', () async {
         final harness = await _createHarness(createHarness);
@@ -273,28 +300,29 @@ void runPersistenceContract({
         final key = KacheKey('closed');
         await harness.backend.close();
 
-        final error = await _capturePersistenceFailure(switch (operation) {
-          KachePersistenceOperation.read => () async {
-            await harness.backend.read<String>(key: key, binding: binding);
-          },
-          KachePersistenceOperation.write => () async {
-            await _writeString(harness, key, binding, 'value');
-          },
-          KachePersistenceOperation.delete => () async {
-            await harness.backend.delete(key: key);
-          },
-          KachePersistenceOperation.clearNamespace => () async {
-            await harness.backend.clearNamespace(
-              namespace: KacheNamespace('closed'),
-            );
-          },
-          KachePersistenceOperation.clear => () async {
-            await harness.backend.clear();
-          },
+        final error = await switch (operation) {
+          KachePersistenceOperation.read => _capturePersistenceFailure(
+            () => harness.backend.read<String>(key: key, binding: binding),
+          ),
+          KachePersistenceOperation.write => _capturePersistenceFailure(
+            () => _writeString(harness, key, binding, 'value'),
+          ),
+          KachePersistenceOperation.delete => _capturePersistenceFailure(
+            () => harness.backend.delete(key: key),
+          ),
+          KachePersistenceOperation.clearNamespace =>
+            _capturePersistenceFailure(
+              () => harness.backend.clearNamespace(
+                namespace: KacheNamespace('closed'),
+              ),
+            ),
+          KachePersistenceOperation.clear => _capturePersistenceFailure(
+            harness.backend.clear,
+          ),
           KachePersistenceOperation.close => throw StateError(
             'Close is intentionally excluded from this matrix.',
           ),
-        });
+        };
 
         _expectBackendFailure(error, operation);
       });
@@ -332,11 +360,20 @@ Future<void> _writeString(
   entry: KachePersistedEntry<String>(data: data, metadata: _metadata()),
 );
 
-Future<KachePersistenceException> _capturePersistenceFailure(
-  Future<void> Function() action,
+Future<KachePersistenceException> _capturePersistenceFailure<T>(
+  Future<T> Function() action,
 ) async {
+  late Future<T> future;
   try {
-    await action();
+    future = action();
+  } on Object catch (error, stackTrace) {
+    fail(
+      'Persistence operation threw synchronously '
+      '(${error.runtimeType}).\n$stackTrace',
+    );
+  }
+  try {
+    await future;
   } on KachePersistenceException catch (error) {
     return error;
   }

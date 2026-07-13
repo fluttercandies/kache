@@ -33,8 +33,8 @@ final class MemoryKachePersistence implements KachePersistenceBackend {
     required KacheKey key,
     required KachePersistenceBinding<T> binding,
   }) async {
-    binding.ensureBackend(this);
     _ensureOpen(KachePersistenceOperation.read);
+    binding.ensureBackend(this);
 
     final record = _entries[key.storageKey];
     if (record == null) {
@@ -59,8 +59,8 @@ final class MemoryKachePersistence implements KachePersistenceBackend {
     required KachePersistenceBinding<T> binding,
     required KachePersistedEntry<T> entry,
   }) async {
-    binding.ensureBackend(this);
     _ensureOpen(KachePersistenceOperation.write);
+    binding.ensureBackend(this);
 
     final existing = _entries[key.storageKey];
     if (existing != null) {

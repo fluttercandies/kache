@@ -22,10 +22,10 @@ scripts:
     run: melos exec --dir-exists=integration_test -- "flutter test integration_test"
   test:persistence-contracts:
     description: Run the reusable persistence contract matrix.
-    run: melos exec --scope=kache_contract_tests -- flutter test test/persistence_contract_test.dart
+    run: melos exec --scope=kache_contract_tests -- dart test test/persistence_contract_test.dart && melos exec --scope=kache_contract_tests -- dart test -p chrome test/persistence_contract_test.dart
   test:hive:
     description: Run the Hive CE adapter test suite.
-    run: melos exec --scope=kache_hive_ce -- dart test
+    run: melos exec --scope=kache_hive_ce --dir-exists=test -- dart test && melos run test:persistence-contracts
   test:riverpod:
     description: Run the Riverpod adapter test suite.
     run: melos exec --scope=kache_riverpod -- dart test
