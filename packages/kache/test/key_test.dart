@@ -143,6 +143,15 @@ void main() {
         ]),
       );
     });
+
+    test('copies byte lists before continuing iterable consumption', () {
+      final bytes = Uint8List.fromList([1, 2]);
+
+      final key = KacheKey('n', _mutateBytesDuringIteration(bytes));
+
+      expect(bytes, orderedEquals([9, 2]));
+      expect(key.storageKey, 'k1:bg:BQAAAAIBAgI');
+    });
   });
 
   group('KacheKey validation', () {
@@ -194,6 +203,12 @@ final _invalidUnicodeStrings = <String>[
   String.fromCharCode(0xdc00),
   String.fromCharCodes([0xd800, 0x41]),
 ];
+
+Iterable<Object?> _mutateBytesDuringIteration(Uint8List bytes) sync* {
+  yield bytes;
+  bytes[0] = 9;
+  yield true;
+}
 
 final class _Stringifiable {
   @override
