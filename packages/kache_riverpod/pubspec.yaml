@@ -10,3 +10,6 @@ resolution: workspace
 dependencies:
   kache: ^0.1.0
   riverpod: ^3.3.2
+
+dev_dependencies:
+  test: ^1.30.0
