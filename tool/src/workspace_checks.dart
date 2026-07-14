@@ -13,23 +13,27 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
   'kache_connectivity_plus': {'connectivity_plus', 'flutter', 'kache'},
   'kache_provider': {'flutter', 'provider', 'kache_flutter'},
   'kache_flutter_example': {
+    'cupertino_icons',
     'flutter',
     'kache_example_support',
     'kache_flutter',
   },
   'kache_riverpod_example': {
+    'cupertino_icons',
     'flutter',
     'flutter_riverpod',
     'kache_example_support',
     'kache_riverpod',
   },
   'kache_bloc_example': {
+    'cupertino_icons',
     'flutter',
     'flutter_bloc',
     'kache_bloc',
     'kache_example_support',
   },
   'kache_provider_example': {
+    'cupertino_icons',
     'flutter',
     'kache_example_support',
     'kache_provider',

@@ -10,6 +10,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  cupertino_icons: ^1.0.8
   flutter:
     sdk: flutter
   flutter_riverpod: 3.3.2
