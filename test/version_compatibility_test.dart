@@ -22,6 +22,21 @@ void main() {
     }
   });
 
+  test('published package repository metadata points to its source', () {
+    const repository = 'https://github.com/fluttercandies/kache';
+
+    for (final path in _packagePaths) {
+      final pubspec = _pubspec(path);
+      expect(pubspec['homepage'], repository, reason: path);
+      expect(
+        pubspec['repository'],
+        '$repository/tree/main/$path',
+        reason: path,
+      );
+      expect(pubspec['issue_tracker'], '$repository/issues', reason: path);
+    }
+  });
+
   test('framework and persistence constraints match the supported matrix', () {
     _expectDependency('packages/kache_hive_ce', 'hive_ce', '^2.19.3');
     _expectDependency('packages/kache_riverpod', 'riverpod', '^3.3.2');
