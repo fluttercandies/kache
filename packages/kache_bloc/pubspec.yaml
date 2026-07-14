@@ -1,6 +1,12 @@
 name: kache_bloc
 description: Bloc and Cubit state management integration for the Kache caching library.
 version: 0.1.0
+homepage: https://pub.dev/packages/kache_bloc
+topics:
+  - cache
+  - bloc
+  - state-management
+  - offline-first
 
 environment:
   sdk: ^3.9.0

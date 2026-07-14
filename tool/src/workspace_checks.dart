@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:pub_semver/pub_semver.dart';
@@ -10,10 +11,36 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
   'kache_riverpod': {'riverpod', 'kache'},
   'kache_bloc': {'bloc', 'kache'},
   'kache_provider': {'flutter', 'provider', 'kache_flutter'},
-  'kache_flutter_example': {'flutter', 'kache_flutter'},
-  'kache_riverpod_example': {'flutter', 'kache_riverpod'},
-  'kache_bloc_example': {'flutter', 'kache_bloc'},
-  'kache_provider_example': {'flutter', 'kache_provider'},
+  'kache_flutter_example': {
+    'flutter',
+    'kache_example_support',
+    'kache_flutter',
+  },
+  'kache_riverpod_example': {
+    'flutter',
+    'flutter_riverpod',
+    'kache_example_support',
+    'kache_riverpod',
+  },
+  'kache_bloc_example': {
+    'flutter',
+    'flutter_bloc',
+    'kache_bloc',
+    'kache_example_support',
+  },
+  'kache_provider_example': {
+    'flutter',
+    'kache_example_support',
+    'kache_provider',
+  },
+  'kache_example_support': {
+    'flutter',
+    'hive_ce_flutter',
+    'http',
+    'kache',
+    'kache_flutter',
+    'kache_hive_ce',
+  },
   'kache_contract_tests': {
     'flutter',
     'kache',
@@ -35,6 +62,110 @@ const Set<String> publishedPackages = {
   'kache_bloc',
   'kache_provider',
 };
+
+const Set<String> _sourceFileNames = {'CMakeLists.txt'};
+const Set<String> _sourceExtensions = {
+  '.c',
+  '.cc',
+  '.cmake',
+  '.cpp',
+  '.css',
+  '.dart',
+  '.entitlements',
+  '.gradle',
+  '.h',
+  '.html',
+  '.java',
+  '.js',
+  '.json',
+  '.kt',
+  '.kts',
+  '.m',
+  '.mm',
+  '.plist',
+  '.properties',
+  '.storyboard',
+  '.swift',
+  '.xib',
+  '.xml',
+  '.yaml',
+  '.yml',
+};
+const Set<String> _excludedSourceSegments = {
+  '.dart_tool',
+  '.idea',
+  '.plugin_symlinks',
+  '.symlinks',
+  'Pods',
+  'build',
+  'doc',
+  'ephemeral',
+  'fixtures',
+  'test',
+};
+
+List<String> checkSourceMarkers(
+  Directory root, {
+  Iterable<String> sourceRoots = const <String>[
+    'packages',
+    'examples',
+    'tool',
+    'benchmark',
+  ],
+}) {
+  final errors = <String>[];
+  final markerNames = <String>[
+    'TO'
+        'DO',
+    'FIX'
+        'ME',
+  ];
+  final marker = RegExp('\\b(${markerNames.join('|')})\\b');
+  for (final sourceRoot in sourceRoots) {
+    final directory = Directory('${root.path}/$sourceRoot');
+    if (!directory.existsSync()) {
+      continue;
+    }
+    final files =
+        directory
+            .listSync(recursive: true, followLinks: false)
+            .whereType<File>()
+            .where((file) => _isProductionSource(root, file))
+            .toList()
+          ..sort((left, right) => left.path.compareTo(right.path));
+    for (final file in files) {
+      final relativePath = _relativePath(root, file);
+      final lines = const LineSplitter().convert(file.readAsStringSync());
+      for (var index = 0; index < lines.length; index++) {
+        final match = marker.firstMatch(lines[index]);
+        if (match != null) {
+          errors.add('$relativePath:${index + 1} contains ${match.group(1)}.');
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+bool _isProductionSource(Directory root, File file) {
+  final relativePath = _relativePath(root, file);
+  final segments = relativePath.split('/');
+  if (segments.any(_excludedSourceSegments.contains)) {
+    return false;
+  }
+  final name = segments.last;
+  if (_sourceFileNames.contains(name)) {
+    return true;
+  }
+  final dot = name.lastIndexOf('.');
+  return dot >= 0 && _sourceExtensions.contains(name.substring(dot));
+}
+
+String _relativePath(Directory root, File file) {
+  final rootPath = root.absolute.path.replaceAll('\\', '/');
+  final filePath = file.absolute.path.replaceAll('\\', '/');
+  return filePath.substring(rootPath.length + 1);
+}
 
 List<String> checkDependencyBoundaries(
   Directory root, {

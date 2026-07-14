@@ -157,4 +157,19 @@ void main() {
       );
     });
   });
+
+  group('source markers', () {
+    test('reports unfinished production markers with a relative line', () {
+      final fixture = Directory('test/tool/fixtures/source_marker');
+
+      expect(
+        checkSourceMarkers(fixture),
+        contains('packages/demo/lib/bad.dart:2 contains TODO.'),
+      );
+    });
+
+    test('accepts the repository production sources', () {
+      expect(checkSourceMarkers(Directory.current), isEmpty);
+    });
+  });
 }

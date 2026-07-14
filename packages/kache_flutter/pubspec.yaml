@@ -1,6 +1,12 @@
 name: kache_flutter
 description: Flutter lifecycle and widget integrations for the Kache caching library.
 version: 0.1.0
+homepage: https://pub.dev/packages/kache_flutter
+topics:
+  - cache
+  - swr
+  - flutter
+  - offline-first
 
 environment:
   sdk: ^3.9.0

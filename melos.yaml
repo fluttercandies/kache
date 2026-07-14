@@ -12,14 +12,15 @@ packages:
   - examples/kache_bloc_example
   - examples/kache_provider_example
   - tool/contract_tests
+  - tool/example_support
 
 scripts:
   test:
     description: Run every package test suite that currently has tests.
-    run: melos exec --dir-exists=test -- "flutter test"
+    run: melos exec -c 1 --dir-exists=test -- "flutter test"
   test:integration:
     description: Run Flutter integration test suites.
-    run: melos exec --dir-exists=integration_test -- "flutter test integration_test"
+    run: melos exec -c 1 --dir-exists=integration_test -- "flutter test integration_test"
   test:persistence-contracts:
     description: Run the reusable persistence contract matrix.
     run: melos exec --scope=kache_contract_tests -- dart test test/persistence_contract_test.dart && melos exec --scope=kache_contract_tests -- dart test -p chrome test/persistence_contract_test.dart
@@ -43,7 +44,7 @@ scripts:
     run: melos exec --scope=kache_contract_tests -- flutter test test/adapter_contract_test.dart
   test:examples:
     description: Run all Flutter example test suites.
-    run: melos exec --scope="*_example" --dir-exists=test -- flutter test
+    run: melos exec -c 1 --scope="*_example" --dir-exists=test -- flutter test
   test:failure-injection:
     description: Run all failure injection validation suites.
     run: melos run test:core-failure-injection && melos run test:hive && melos run test:adapter-contracts
@@ -52,10 +53,10 @@ scripts:
     run: melos run test:core-lifecycle && melos run test:adapter-contracts && melos run test:examples
   analyze:examples:
     description: Analyze all Flutter example applications.
-    run: melos exec --scope="*_example" -- flutter analyze
+    run: melos exec -c 1 --scope="*_example" -- flutter analyze
   docs:
     description: Generate API documentation for every published package.
-    run: melos exec --no-private -- dart doc
+    run: melos exec --no-private -- "dart doc --output ../../.dart_tool/docs/\$MELOS_PACKAGE_NAME"
   test:readme:
     description: Compile and validate documented examples.
     run: dart test test/readme_examples_test.dart
@@ -67,7 +68,7 @@ scripts:
     run: dart test test/version_compatibility_test.dart
   benchmark:
     description: Run the core and persistence benchmark suite.
-    run: melos exec --scope=kache -- dart run benchmark/kache_benchmark.dart
+    run: dart run benchmark/kache_benchmark.dart
   dependency-boundaries:
     description: Validate package dependencies and detect workspace cycles.
     run: dart run tool/check_dependency_boundaries.dart

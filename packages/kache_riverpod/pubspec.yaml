@@ -1,6 +1,12 @@
 name: kache_riverpod
 description: Riverpod state management integration for the Kache caching library.
 version: 0.1.0
+homepage: https://pub.dev/packages/kache_riverpod
+topics:
+  - cache
+  - riverpod
+  - state-management
+  - offline-first
 
 environment:
   sdk: ^3.9.0

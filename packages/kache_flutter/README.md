@@ -1,0 +1,116 @@
+# kache_flutter
+
+[简体中文](README.zh-CN.md)
+
+Flutter widgets and lifecycle integration for Kache, with no third-party state
+management dependency. This package re-exports the complete `kache` API.
+
+## Installation
+
+```bash
+flutter pub add kache_flutter
+```
+
+## Quick start
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:kache_flutter/kache_flutter.dart';
+
+final class User {
+  const User(this.id, this.name);
+
+  final String id;
+  final String name;
+}
+
+abstract interface class UserApi {
+  Future<User> fetchUser(String id);
+}
+
+Widget createUserApp({required UserApi api, required String userId}) {
+  final client = KacheClient();
+  final query = KacheQuery<User>.memory(
+    key: KacheKey('users', <Object?>[userId]),
+    fetch: (_) => api.fetchUser(userId),
+  );
+
+  return KacheScope(
+    client: client,
+    ownership: KacheScopeOwnership.owned,
+    child: MaterialApp(
+      home: Scaffold(
+        body: KacheBuilder<User>(
+          query: query,
+          builder: (context, snapshot, controller) {
+            if (!snapshot.hasData) {
+              if (snapshot.phase == KachePhase.failure) {
+                return const Center(child: Text('Could not load user'));
+              }
+              return const Center(child: CircularProgressIndicator());
+            }
+            return ListTile(
+              title: Text(snapshot.requireData.name),
+              subtitle: snapshot.failure == null
+                  ? null
+                  : const Text('Showing cached data'),
+              trailing: IconButton(
+                tooltip: 'Refresh user',
+                onPressed: controller.refresh,
+                icon: snapshot.isRefreshing
+                    ? const CircularProgressIndicator()
+                    : const Icon(Icons.refresh),
+              ),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+```
+
+## Widgets
+
+- `KacheScope` exposes a client and bridges `AppLifecycleState.resumed` to
+  policy-driven revalidation.
+- `KacheBuilder<T>` owns one `KacheController<T>` and rebuilds from complete
+  snapshots.
+- `KacheListener<T>` performs side effects without rebuilding its child.
+- `KacheController<T>` is a `ValueListenable<KacheSnapshot<T>>` and exposes all
+  resource commands.
+
+When a widget receives a new query with the same key, the controller updates
+the handle's fetcher and policy without losing shared data. A different key
+releases the previous handle and binds a new one.
+
+## Ownership
+
+`KacheScopeOwnership.borrowed` is the default. Use `owned` only when the scope
+is the application boundary responsible for closing the client. Builders,
+listeners, and controllers own resource handles, never the client.
+
+Lifecycle errors can be routed through `KacheScope.onError`. Without a custom
+handler, they are reported through `FlutterError.reportError`.
+
+## Persistence
+
+Add `kache_hive_ce` as a direct dependency when the application imports it.
+Open the store before creating the scope, configure an owned backend on the
+client, and use a persisted query binding. Codec and migration logic stay in
+the storage package.
+
+## Compatibility
+
+| Component | Supported range |
+| --- | --- |
+| Dart | Dart >=3.9.0 <4.0.0 |
+| Flutter | Flutter >=3.35.0 |
+| Hive CE | `>=2.19.3 <3.0.0` |
+| Riverpod | `>=3.3.2 <4.0.0` |
+| Bloc | `>=9.2.1 <10.0.0` |
+| Provider | `>=6.1.5+1 <7.0.0` |
+
+## License
+
+MIT

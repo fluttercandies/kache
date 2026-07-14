@@ -11,4 +11,15 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
+  flutter_bloc: 9.1.1
   kache_bloc: ^0.1.0
+  kache_example_support: ^0.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  kache: ^0.1.0
+  kache_hive_ce: ^0.1.0
+
+flutter:
+  uses-material-design: true
