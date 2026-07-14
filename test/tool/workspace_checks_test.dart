@@ -114,6 +114,16 @@ void main() {
       );
     });
 
+    test('web build restores development plugin registrants', () {
+      for (final path in const <String>['melos.yaml', 'pubspec.yaml']) {
+        expect(
+          File(path).readAsStringSync(),
+          contains('flutter build web --release && flutter pub get'),
+          reason: path,
+        );
+      }
+    });
+
     test('reports a run command that differs between Melos configs', () {
       final fixture = Directory('test/tool/fixtures/script_command_mismatch');
       final errors = checkMelosScriptManifest(

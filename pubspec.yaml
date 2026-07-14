@@ -54,7 +54,7 @@ melos:
     test:failure-injection: 'melos run test:core-failure-injection && melos run test:hive && melos run test:adapter-contracts'
     test:lifecycle: 'melos run test:core-lifecycle && melos run test:adapter-contracts && melos run test:examples'
     analyze:examples: 'melos exec -c 1 --scope="*_example" -- flutter analyze'
-    build:web: 'melos exec --scope=kache_flutter_example -- flutter build web --release'
+    build:web: 'melos exec --scope=kache_flutter_example -- "flutter build web --release && flutter pub get"'
     docs: 'melos exec --no-private -- "dart doc --output ../../.dart_tool/docs/\$MELOS_PACKAGE_NAME"'
     test:readme: 'dart test test/readme_examples_test.dart'
     api-check: 'dart test test/api_compatibility_test.dart'
