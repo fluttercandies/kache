@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:bloc/bloc.dart';
-import 'package:kache/kache.dart';
 import 'package:kache_bloc/kache_bloc.dart';
 import 'package:test/test.dart';
 

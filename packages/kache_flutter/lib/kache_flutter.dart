@@ -1,6 +1,8 @@
 /// Flutter lifecycle and widget integrations for Kache.
 library;
 
+export 'package:kache/kache.dart';
+
 export 'src/builder.dart';
 export 'src/controller.dart';
 export 'src/listener.dart';

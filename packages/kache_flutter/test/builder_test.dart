@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kache/kache.dart';
 import 'package:kache_flutter/kache_flutter.dart';
 
 void main() {

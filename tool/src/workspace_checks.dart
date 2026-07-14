@@ -9,7 +9,7 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
   'kache_hive_ce': {'hive_ce', 'kache'},
   'kache_riverpod': {'riverpod', 'kache'},
   'kache_bloc': {'bloc', 'kache'},
-  'kache_provider': {'provider', 'kache_flutter'},
+  'kache_provider': {'flutter', 'provider', 'kache_flutter'},
   'kache_flutter_example': {'flutter', 'kache_flutter'},
   'kache_riverpod_example': {'flutter', 'kache_riverpod'},
   'kache_bloc_example': {'flutter', 'kache_bloc'},

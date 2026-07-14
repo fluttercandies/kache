@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:kache/kache.dart';
 import 'package:kache_riverpod/kache_riverpod.dart';
 import 'package:riverpod/riverpod.dart';
 import 'package:test/test.dart';
