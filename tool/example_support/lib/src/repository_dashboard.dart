@@ -17,6 +17,7 @@ class RepositoryDashboard extends StatefulWidget {
     required this.onRefresh,
     required this.onClear,
     this.showNetworkImage = true,
+    this.compact = false,
     super.key,
   });
 
@@ -35,6 +36,11 @@ class RepositoryDashboard extends StatefulWidget {
   /// Whether the real GitHub avatar should be loaded from the network.
   final bool showNetworkImage;
 
+  /// When true, renders without its own [Scaffold]/[AppBar] so the dashboard
+  /// can be embedded inside an outer scaffold (e.g. a playground tab). The
+  /// refresh/clear actions become an inline control row instead of an app bar.
+  final bool compact;
+
   @override
   State<RepositoryDashboard> createState() => _RepositoryDashboardState();
 }
@@ -50,6 +56,70 @@ final class _RepositoryDashboardState extends State<RepositoryDashboard> {
     final duration = reduceMotion
         ? Duration.zero
         : const Duration(milliseconds: 180);
+    if (widget.compact) {
+      // Embedded mode: no own Scaffold/AppBar. The playground shell owns the
+      // app bar and tabs; refresh/clear become an inline control row.
+      return Column(
+        children: <Widget>[
+          SizedBox(
+            height: 3,
+            child: snapshot.isRefreshing
+                ? const LinearProgressIndicator(minHeight: 3)
+                : const SizedBox.expand(),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
+            child: Row(
+              children: <Widget>[
+                Text(
+                  '${widget.adapterName} repository',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh repository',
+                  onPressed: snapshot.isRefreshing || _commandActive
+                      ? null
+                      : () => _runCommand(
+                          widget.onRefresh,
+                          successMessage: 'Repository refreshed',
+                        ),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                IconButton(
+                  tooltip: 'Clear cached repository',
+                  onPressed: _commandActive
+                      ? null
+                      : () => _runCommand(
+                          widget.onClear,
+                          successMessage: 'Cached repository cleared',
+                        ),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 840),
+                  child: AnimatedSwitcher(
+                    duration: duration,
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    child: _buildBody(context, snapshot),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,

@@ -48,6 +48,71 @@ void main() {
     await tester.pump();
     expect(runtime.client.isClosed, isTrue);
   });
+
+  testWidgets('policy cards show fetch counts from client events', (
+    tester,
+  ) async {
+    final store = await HiveCeKacheStore.open(
+      boxName: 'riverpod_example_policy_counts_test',
+      bytes: Uint8List(0),
+    );
+    final runtime = ExampleRuntime.fromDependencies(
+      store: store,
+      gateway: _ControlledGateway(Future.value(_profile())),
+    );
+
+    await tester.pumpWidget(
+      KacheRiverpodExampleApp(
+        runtimeFactory: () async => runtime,
+        showNetworkImage: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Policies'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fetches'), findsNWidgets(4));
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('1'), findsWidgets);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
+
+  testWidgets('keepAlive controls update immediately', (tester) async {
+    final store = await HiveCeKacheStore.open(
+      boxName: 'riverpod_example_keep_alive_test',
+      bytes: Uint8List(0),
+    );
+    final runtime = ExampleRuntime.fromDependencies(
+      store: store,
+      gateway: _ControlledGateway(Future.value(_profile())),
+    );
+
+    await tester.pumpWidget(
+      KacheRiverpodExampleApp(
+        runtimeFactory: () async => runtime,
+        showNetworkImage: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Policies'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -3000));
+    await tester.pumpAndSettle();
+    expect(find.text('Request keepAlive'), findsOneWidget);
+
+    await tester.tap(find.text('Request keepAlive'));
+    await tester.pump();
+    expect(find.text('Release keepAlive'), findsOneWidget);
+
+    await tester.tap(find.text('Release keepAlive'));
+    await tester.pump();
+    expect(find.text('Request keepAlive'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
 }
 
 final class _ControlledGateway implements RepositoryGateway {

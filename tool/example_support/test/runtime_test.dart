@@ -75,6 +75,43 @@ void main() {
       await runtime.close();
     },
   );
+
+  test('exposes one query per demonstrated policy and storage mode', () async {
+    final store = await HiveCeKacheStore.open(
+      boxName: 'example_runtime_queries',
+      bytes: Uint8List(0),
+    );
+    final runtime = ExampleRuntime.fromDependencies(
+      store: store,
+      gateway: _FakeRepositoryGateway(_profile()),
+    );
+
+    // SWR persisted query (the shared repository query).
+    expect(runtime.query.storageMode, KacheStorageMode.persisted);
+    expect(runtime.query.policy.isCacheOnly, isFalse);
+    // cacheFirst persisted query.
+    expect(runtime.cacheFirstQuery.storageMode, KacheStorageMode.persisted);
+    expect(runtime.cacheFirstQuery.policy.isCacheOnly, isFalse);
+    // cacheOnly persisted query.
+    expect(runtime.cacheOnlyQuery.storageMode, KacheStorageMode.persisted);
+    expect(runtime.cacheOnlyQuery.policy.isCacheOnly, isTrue);
+    // networkOnly query: no storage, polling enabled.
+    expect(runtime.networkOnlyQuery.storageMode, KacheStorageMode.none);
+    expect(runtime.networkOnlyQuery.policy.refreshInterval, isNotNull);
+    // memory query: process memory only.
+    expect(runtime.memoryQuery.storageMode, KacheStorageMode.memory);
+    // Distinct keys so each query owns its own cache entry.
+    final keys = <String>{
+      runtime.query.key.storageKey,
+      runtime.cacheFirstQuery.key.storageKey,
+      runtime.cacheOnlyQuery.key.storageKey,
+      runtime.networkOnlyQuery.key.storageKey,
+      runtime.memoryQuery.key.storageKey,
+    };
+    expect(keys.length, 5);
+
+    await runtime.close();
+  });
 }
 
 final class _TrackedNetwork implements KacheNetwork {

@@ -87,6 +87,42 @@ void main() {
     expect(refreshes, 1);
     expect(clears, 1);
   });
+
+  testWidgets('compact refresh progress does not shift repository content', (
+    tester,
+  ) async {
+    final ready = KacheSnapshot<RepositoryProfile>.ready(
+      data: _profile(),
+      freshness: KacheFreshness.fresh,
+      source: KacheDataSource.fetch,
+      fetchedAt: DateTime.utc(2026, 7, 14, 8, 30),
+    );
+    final refreshing = KacheSnapshot<RepositoryProfile>.ready(
+      data: _profile(),
+      freshness: KacheFreshness.fresh,
+      source: KacheDataSource.fetch,
+      fetchedAt: DateTime.utc(2026, 7, 14, 8, 30),
+      isRefreshing: true,
+    );
+
+    Widget app(KacheSnapshot<RepositoryProfile> snapshot) => MaterialApp(
+      home: RepositoryDashboard(
+        adapterName: 'Flutter',
+        snapshot: snapshot,
+        onRefresh: () async => snapshot,
+        onClear: () async => KacheSnapshot<RepositoryProfile>.idle(),
+        showNetworkImage: false,
+        compact: true,
+      ),
+    );
+
+    await tester.pumpWidget(app(ready));
+    final readyTop = tester.getTopLeft(find.text('Flutter repository')).dy;
+    await tester.pumpWidget(app(refreshing));
+    final refreshingTop = tester.getTopLeft(find.text('Flutter repository')).dy;
+
+    expect(refreshingTop, readyTop);
+  });
 }
 
 RepositoryProfile _profile() => RepositoryProfile(

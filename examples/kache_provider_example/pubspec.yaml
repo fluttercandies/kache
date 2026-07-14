@@ -16,6 +16,7 @@ dependencies:
   kache_provider: ^1.0.0
 
 dev_dependencies:
+  flutter_cockpit: ^1.1.2
   flutter_test:
     sdk: flutter
   kache: ^1.0.0
