@@ -21,58 +21,56 @@ flutter pub add kache_flutter
 import 'package:flutter/material.dart';
 import 'package:kache_flutter/kache_flutter.dart';
 
-final class User {
-  const User(this.id, this.name);
+typedef Profile = ({String name});
 
-  final String id;
-  final String name;
-}
-
-abstract interface class UserApi {
-  Future<User> fetchUser(String id);
-}
-
-Widget createUserApp({required UserApi api, required String userId}) {
-  final client = KacheClient();
-  final query = KacheQuery<User>.memory(
-    key: KacheKey('users', <Object?>[userId]),
-    fetch: (_) => api.fetchUser(userId),
-  );
-
-  return KacheScope(
-    client: client,
-    ownership: KacheScopeOwnership.owned,
-    child: MaterialApp(
-      home: Scaffold(
-        body: KacheBuilder<User>(
-          query: query,
-          builder: (context, snapshot, controller) {
-            if (!snapshot.hasData) {
-              if (snapshot.isFailed) {
-                return const Center(child: Text('Could not load user'));
+Widget createProfileApp({required Future<Profile> Function() fetchProfile}) =>
+    KacheScope(
+      client: KacheClient(),
+      ownership: KacheScopeOwnership.owned,
+      child: MaterialApp(
+        home: Scaffold(
+          body: KacheBuilder<Profile>(
+            query: KacheQuery<Profile>.memory(
+              key: KacheKey('profile'),
+              fetch: (_) => fetchProfile(),
+            ),
+            builder: (context, snapshot, controller) {
+              if (!snapshot.hasData) {
+                return Center(
+                  child: snapshot.isFailed
+                      ? FilledButton(
+                          onPressed: controller.load,
+                          child: const Text('Try again'),
+                        )
+                      : const CircularProgressIndicator(),
+                );
               }
-              return const Center(child: CircularProgressIndicator());
-            }
-            return ListTile(
-              title: Text(snapshot.requireData.name),
-              subtitle: snapshot.failure == null
-                  ? null
-                  : const Text('Showing cached data'),
-              trailing: IconButton(
-                tooltip: 'Refresh user',
-                onPressed: controller.refresh,
-                icon: snapshot.isRefreshing
-                    ? const CircularProgressIndicator()
-                    : const Icon(Icons.refresh),
-              ),
-            );
-          },
+              return RefreshIndicator(
+                onRefresh: () async => controller.refresh(),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: <Widget>[
+                    ListTile(
+                      title: Text(snapshot.requireData.name),
+                      subtitle: snapshot.hasFailure
+                          ? const Text('Refresh failed - showing cached data')
+                          : null,
+                      trailing: snapshot.isRefreshing
+                          ? const CircularProgressIndicator()
+                          : const Icon(Icons.cloud_done),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
 ```
+
+Builder 会自动加载。后台刷新或刷新失败时，缓存数据仍然可见；下拉刷新会显式调用同一个
+自动去重的 query。
 
 ## 组件
 

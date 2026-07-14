@@ -32,56 +32,81 @@ level package only when your source imports it directly, such as
 
 ## Quick start
 
-```dart
-import 'dart:async';
-
-import 'package:kache/kache.dart';
-
-final class User {
-  const User(this.id, this.name);
-
-  final String id;
-  final String name;
-}
-
-abstract interface class UserApi {
-  Future<User> fetchUser(String id);
-}
-
-Future<void> showUser({
-  required UserApi api,
-  required String userId,
-  required void Function(KacheSnapshot<User>) render,
-}) async {
-  final client = KacheClient();
-  final query = KacheQuery<User>.memory(
-    key: KacheKey('users', <Object?>[userId]),
-    fetch: (context) async {
-      context.throwIfCancelled();
-      return api.fetchUser(userId);
-    },
-    policy: KachePolicy.staleWhileRevalidate(),
-  );
-  final resource = client.watch(query);
-  final subscription = resource.stream.listen(render);
-
-  try {
-    await resource.load();
-  } finally {
-    await subscription.cancel();
-    resource.dispose();
-    await client.close();
-  }
-}
+```bash
+flutter pub add kache_flutter
 ```
 
-Listening to `resource.stream` replays the current snapshot and starts the
-first load once. Cached data stays visible while `isRefreshing` is true. A
-refresh failure is available in `snapshot.failure` without removing data when
-`retainDataOnError` is enabled.
+Declare what to fetch, place one client at the app boundary, and render the
+snapshot. The default policy shows cached data immediately and revalidates it
+in the background.
 
-Use `isLoading`, `isReady`, `isFailed`, `isStale`, and `hasFailure` for common
-UI checks without flattening the complete snapshot state.
+```dart
+import 'package:flutter/material.dart';
+import 'package:kache_flutter/kache_flutter.dart';
+
+typedef Profile = ({String name});
+
+Widget createProfileApp({required Future<Profile> Function() fetchProfile}) =>
+    KacheScope(
+      client: KacheClient(),
+      ownership: KacheScopeOwnership.owned,
+      child: MaterialApp(
+        home: Scaffold(
+          body: KacheBuilder<Profile>(
+            query: KacheQuery<Profile>.memory(
+              key: KacheKey('profile'),
+              fetch: (_) => fetchProfile(),
+            ),
+            builder: (context, snapshot, controller) {
+              if (!snapshot.hasData) {
+                return Center(
+                  child: snapshot.isFailed
+                      ? FilledButton(
+                          onPressed: controller.load,
+                          child: const Text('Try again'),
+                        )
+                      : const CircularProgressIndicator(),
+                );
+              }
+              return RefreshIndicator(
+                onRefresh: () async => controller.refresh(),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: <Widget>[
+                    ListTile(
+                      title: Text(snapshot.requireData.name),
+                      subtitle: snapshot.hasFailure
+                          ? const Text('Refresh failed - showing cached data')
+                          : null,
+                      trailing: snapshot.isRefreshing
+                          ? const CircularProgressIndicator()
+                          : const Icon(Icons.cloud_done),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+```
+
+`KacheBuilder` loads automatically. With data, the page stays usable while
+`isRefreshing` is true; if that refresh fails, `hasFailure` becomes true
+without discarding the cached profile. Pull to refresh uses the same query and
+request deduplication.
+
+`KacheQuery.memory` keeps data for the lifetime of the client. Use
+`KacheQuery.persisted` with `kache_hive_ce` when data must survive an app
+restart.
+
+## Dart-only
+
+Pure Dart applications can depend on the zero-third-party `kache` package and
+use its resource stream directly. See the
+[core quick start](packages/kache/README.md#quick-start) for ownership and
+cleanup.
 
 ## Policy guide
 

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 const _documents = <String, String>{
-  '.': 'test/readme_examples/kache.dart',
+  '.': 'test/readme_examples/kache_flutter.dart',
   'packages/kache': 'test/readme_examples/kache.dart',
   'packages/kache_flutter': 'test/readme_examples/kache_flutter.dart',
   'packages/kache_hive_ce': 'test/readme_examples/kache_hive_ce.dart',
@@ -34,6 +34,16 @@ void main() {
   test('root documentation covers production decisions', () {
     final english = File('README.md').readAsStringSync();
     final chinese = File('README.zh-CN.md').readAsStringSync();
+    for (final document in <String>[english, chinese]) {
+      expect(document, contains('flutter pub add kache_flutter'));
+      expect(document, contains('KacheQuery<Profile>.memory'));
+      expect(document, contains('KacheScopeOwnership.owned'));
+      expect(document, contains('snapshot.isRefreshing'));
+      expect(document, contains('snapshot.hasFailure'));
+      expect(document, isNot(contains('resource.stream.listen')));
+    }
+    expect(english, contains('## Dart-only'));
+    expect(chinese, contains('## 纯 Dart 使用'));
     for (final heading in const <String>[
       '## Packages',
       '## Quick start',
