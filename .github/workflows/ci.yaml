@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality and publication readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Melos
+        run: dart pub global activate melos 7.8.0
+
+      - name: Bootstrap workspace
+        run: melos bootstrap
+
+      - name: Verify fixes, formatting, and analysis
+        run: |
+          dart fix --apply
+          dart format .
+          git diff --exit-code
+          dart analyze
+
+      - name: Verify stable keys on VM and Web
+        run: |
+          melos exec --scope=kache -- dart test test/key_test.dart
+          melos exec --scope=kache -- dart test -p chrome test/key_test.dart
+
+      - name: Run workspace and integration tests
+        run: |
+          melos run test
+          melos run test:integration
+
+      - name: Run persistence and framework tests
+        run: |
+          melos run test:persistence-contracts
+          melos run test:hive
+          melos run test:riverpod
+          melos run test:bloc
+
+      - name: Run failure, lifecycle, adapter, and example tests
+        run: |
+          melos run test:core-failure-injection
+          melos run test:core-lifecycle
+          melos run test:adapter-contracts
+          melos run test:examples
+          melos run test:failure-injection
+          melos run test:lifecycle
+
+      - name: Verify examples and documentation
+        run: |
+          melos run analyze:examples
+          melos run docs
+          melos run test:readme
+          melos run api-check
+          melos run compatibility-check
+
+      - name: Verify performance and workspace invariants
+        run: |
+          melos run benchmark
+          melos run dependency-boundaries
+          melos run verify:script-manifest
+          melos run source-marker-check
+
+      - name: Verify publication readiness
+        run: melos run publish-dry-run
+
+      - name: Verify tracked files remain unchanged
+        run: git diff --exit-code
