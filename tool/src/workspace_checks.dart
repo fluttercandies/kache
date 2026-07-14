@@ -22,6 +22,7 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
     'kache_hive_ce',
     'kache_provider',
     'kache_riverpod',
+    'riverpod',
     'test',
   },
 };
