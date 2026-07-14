@@ -6,6 +6,26 @@ import 'package:kache_example_support/kache_example_support.dart';
 import 'package:kache_hive_ce/kache_hive_ce.dart';
 
 void main() {
+  test('owns an injected reconnect source', () async {
+    final store = await HiveCeKacheStore.open(
+      boxName: 'example_runtime_network',
+      bytes: Uint8List(0),
+    );
+    final network = _TrackedNetwork();
+    final runtime = ExampleRuntime.fromDependencies(
+      store: store,
+      gateway: _FakeRepositoryGateway(_profile()),
+      network: network,
+    );
+
+    expect(runtime.client.network, same(network));
+    expect(runtime.query.policy.refreshOnReconnect, KacheRevalidation.always);
+    await runtime.close();
+    await runtime.close();
+
+    expect(network.closeCount, 1);
+  });
+
   test(
     'fetches through the gateway and persists the repository profile',
     () async {
@@ -55,6 +75,18 @@ void main() {
       await runtime.close();
     },
   );
+}
+
+final class _TrackedNetwork implements KacheNetwork {
+  int closeCount = 0;
+
+  @override
+  Stream<KacheNetworkState> get states => const Stream.empty();
+
+  @override
+  Future<void> close() async {
+    closeCount += 1;
+  }
 }
 
 final class _FakeRepositoryGateway implements RepositoryGateway {

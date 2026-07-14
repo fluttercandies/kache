@@ -44,7 +44,9 @@ jobs:
           dart analyze
           melos run test
           melos run test:integration
+          melos run test:connectivity
           melos run analyze:examples
+          melos run build:web
           melos run api-check
 
   quality:
@@ -90,6 +92,7 @@ jobs:
         run: |
           melos run test:persistence-contracts
           melos run test:hive
+          melos run test:connectivity
           melos run test:riverpod
           melos run test:bloc
 
@@ -105,6 +108,7 @@ jobs:
       - name: Verify examples and documentation
         run: |
           melos run analyze:examples
+          melos run build:web
           melos run docs
           melos run test:readme
           melos run api-check

@@ -81,7 +81,9 @@ void main() {
       'dart analyze',
       'melos run test',
       'melos run test:integration',
+      'melos run test:connectivity',
       'melos run analyze:examples',
+      'melos run build:web',
       'melos run api-check',
     ]) {
       expect(
@@ -107,6 +109,7 @@ void main() {
       'melos run test:integration',
       'melos run test:persistence-contracts',
       'melos run test:hive',
+      'melos run test:connectivity',
       'melos run test:riverpod',
       'melos run test:bloc',
       'melos run test:core-failure-injection',
@@ -116,6 +119,7 @@ void main() {
       'melos run test:failure-injection',
       'melos run test:lifecycle',
       'melos run analyze:examples',
+      'melos run build:web',
       'melos run docs',
       'melos run test:readme',
       'melos run api-check',

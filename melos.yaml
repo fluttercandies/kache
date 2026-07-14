@@ -6,6 +6,7 @@ packages:
   - packages/kache_hive_ce
   - packages/kache_riverpod
   - packages/kache_bloc
+  - packages/kache_connectivity_plus
   - packages/kache_provider
   - examples/kache_flutter_example
   - examples/kache_riverpod_example
@@ -27,6 +28,9 @@ scripts:
   test:hive:
     description: Run the Hive CE adapter test suite.
     run: melos exec --scope=kache_hive_ce --dir-exists=test -- dart test && melos run test:persistence-contracts
+  test:connectivity:
+    description: Run connectivity_plus adapter tests on VM and Chrome.
+    run: melos exec --scope=kache_connectivity_plus -- flutter test && melos exec --scope=kache_connectivity_plus -- flutter test -d chrome && melos exec --scope=kache_contract_tests -- flutter test test/connectivity_contract_test.dart
   test:riverpod:
     description: Run the Riverpod adapter test suite.
     run: melos exec --scope=kache_riverpod -- dart test
@@ -54,6 +58,9 @@ scripts:
   analyze:examples:
     description: Analyze all Flutter example applications.
     run: melos exec -c 1 --scope="*_example" -- flutter analyze
+  build:web:
+    description: Compile the production example and plugin graph for Web.
+    run: melos exec --scope=kache_flutter_example -- flutter build web --release
   docs:
     description: Generate API documentation for every published package.
     run: melos exec --no-private -- "dart doc --output ../../.dart_tool/docs/\$MELOS_PACKAGE_NAME"

@@ -6,6 +6,7 @@ import 'command.dart';
 import 'event.dart';
 import 'failure.dart';
 import 'key.dart';
+import 'network.dart';
 import 'persistence.dart';
 import 'policy.dart';
 import 'query.dart';
@@ -13,6 +14,7 @@ import 'scheduler.dart';
 import 'snapshot.dart';
 
 part 'coordinator.dart';
+part 'client_network.dart';
 part 'entry.dart';
 part 'entry_commands.dart';
 part 'entry_persistence.dart';
@@ -28,6 +30,8 @@ final class KacheClient {
   KacheClient({
     this.persistence,
     this.persistenceOwnership = KachePersistenceOwnership.borrowed,
+    this.network,
+    this.networkOwnership = KacheNetworkOwnership.borrowed,
     KacheClock clock = systemKacheClock,
     KacheScheduler scheduler = systemKacheScheduler,
     KacheObserver? observer,
@@ -41,6 +45,13 @@ final class KacheClient {
         'Owned persistence requires a configured backend.',
       );
     }
+    if (network == null && networkOwnership == KacheNetworkOwnership.owned) {
+      throw const KacheConfigurationException(
+        'owned_network_missing',
+        'Owned network requires a configured source.',
+      );
+    }
+    _startNetwork();
   }
 
   /// The optional persistence backend used by persisted queries.
@@ -48,6 +59,12 @@ final class KacheClient {
 
   /// Whether this client closes [persistence].
   final KachePersistenceOwnership persistenceOwnership;
+
+  /// Optional network source used for reconnect revalidation.
+  final KacheNetwork? network;
+
+  /// Whether this client closes [network].
+  final KacheNetworkOwnership networkOwnership;
 
   final KacheClock _clock;
   final KacheScheduler _scheduler;
@@ -58,13 +75,21 @@ final class KacheClient {
   final Set<_KacheResourceBase> _resources = <_KacheResourceBase>{};
   final Map<String, int> _namespaceEpochs = <String, int>{};
   int _globalEpoch = 0;
-  Future<void> _clearTail = Future<void>.value();
+  Future<void>? _clearTail;
   bool _isClosed = false;
   bool _isPollingPaused = false;
+  bool _isReconnectPaused = false;
+  bool _reconnectQueued = false;
+  KacheNetworkState? _networkState;
+  StreamSubscription<KacheNetworkState>? _networkSubscription;
+  Future<void>? _reconnectFuture;
   Future<void>? _closeFuture;
 
   /// Whether [close] has started.
   bool get isClosed => _isClosed;
+
+  /// Latest state emitted by [network], or `null` before its first state.
+  KacheNetworkState? get networkState => _networkState;
 
   /// Broadcast cache lifecycle events without replaying payload data.
   Stream<KacheEvent> get events => _events.stream;
@@ -106,6 +131,15 @@ final class KacheClient {
     );
   }
 
+  /// Revalidates active handles according to each reconnect policy.
+  Future<void> revalidateOnReconnect() {
+    _ensureOpen();
+    final resources = _resources.toList(growable: false);
+    return Future.wait<void>(
+      resources.map((resource) => resource.revalidateOnReconnect()),
+    );
+  }
+
   /// Forces refresh on every active handle.
   Future<void> refreshActive() {
     _ensureOpen();
@@ -136,6 +170,25 @@ final class KacheClient {
     _isPollingPaused = false;
     for (final resource in _resources.toList(growable: false)) {
       resource.resumePolling();
+    }
+  }
+
+  /// Pauses network-recovery revalidation without stopping state observation.
+  void pauseReconnect() {
+    _ensureOpen();
+    _isReconnectPaused = true;
+  }
+
+  /// Resumes network-recovery revalidation and consumes one pending recovery.
+  void resumeReconnect() {
+    _ensureOpen();
+    if (!_isReconnectPaused) {
+      return;
+    }
+    _isReconnectPaused = false;
+    if (_reconnectQueued) {
+      _reconnectQueued = false;
+      _requestReconnect();
     }
   }
 
@@ -405,7 +458,9 @@ final class KacheClient {
     final result = Completer<KacheClearResult>();
     _clearTail = tailCompleter.future;
     unawaited(() async {
-      await previous;
+      if (previous != null) {
+        await previous;
+      }
       try {
         result.complete(await operation());
       } on Object catch (error, stackTrace) {
@@ -439,6 +494,9 @@ final class KacheClient {
   }
 
   Future<void> _performClose({required bool drainWrites}) async {
+    final networkSubscription = _networkSubscription;
+    _networkSubscription = null;
+    await networkSubscription?.cancel();
     final resources = _resources.toList(growable: false);
     for (final resource in resources) {
       resource.dispose();
@@ -451,7 +509,10 @@ final class KacheClient {
     for (final entry in entries) {
       entry.prepareForClientClose(cancelPendingWrites: !drainWrites);
     }
-    await _clearTail;
+    final clearTail = _clearTail;
+    if (clearTail != null) {
+      await clearTail;
+    }
     await Future.wait<void>(entries.map((entry) => entry.drainForClose()));
     if (drainWrites) {
       _globalEpoch += 1;
@@ -460,9 +521,7 @@ final class KacheClient {
       await entry.finishClose();
     }
     try {
-      if (persistenceOwnership == KachePersistenceOwnership.owned) {
-        await persistence!.close();
-      }
+      await _closeOwnedDependencies();
     } finally {
       _emitEvent(kind: KacheEventKind.clientClosed);
       await _events.close();

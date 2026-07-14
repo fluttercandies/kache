@@ -27,11 +27,11 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
     bool keepAlive = false,
   }) : _clientBuilder = client,
        _queryBuilder = query,
-       _keepAliveInitially = keepAlive;
+       _keepAliveRequested = keepAlive;
 
   final KacheClientBuilder _clientBuilder;
   final KacheQueryBuilder<T> _queryBuilder;
-  final bool _keepAliveInitially;
+  bool _keepAliveRequested;
   KacheResource<T>? _resource;
   KeepAliveLink? _keepAliveLink;
 
@@ -42,14 +42,14 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
   KacheQuery<T> get query => _requireResource().query;
 
   /// Whether this notifier currently holds a Riverpod keep-alive link.
-  bool get isKeptAlive => _keepAliveLink != null;
+  bool get isKeptAlive => _keepAliveRequested;
 
   @override
   KacheSnapshot<T> build() {
     final resource = _clientBuilder(ref).watch(_queryBuilder(ref));
     _resource = resource;
-    if (_keepAliveInitially) {
-      keepAlive();
+    if (_keepAliveRequested) {
+      _keepAliveLink = ref.keepAlive();
     }
     StreamSubscription<KacheSnapshot<T>>? subscription;
     scheduleMicrotask(() {
@@ -63,7 +63,6 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
       });
     });
     ref.onDispose(() {
-      _keepAliveLink?.close();
       _keepAliveLink = null;
       final activeSubscription = subscription;
       if (activeSubscription != null) {
@@ -101,11 +100,13 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
   /// Keeps an auto-dispose provider alive after its final listener is removed.
   void keepAlive() {
     _ensureMounted();
+    _keepAliveRequested = true;
     _keepAliveLink ??= ref.keepAlive();
   }
 
   /// Releases the current keep-alive link, if any.
   void releaseKeepAlive() {
+    _keepAliveRequested = false;
     _keepAliveLink?.close();
     _keepAliveLink = null;
   }

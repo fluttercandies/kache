@@ -44,10 +44,18 @@ void verifyKacheTypes({
   required KacheCancellationController cancellationController,
   required KacheCancelledException cancellationError,
   required KacheScheduledTask scheduledTask,
+  required KacheNetwork network,
+  required KacheNetworkState networkState,
+  required KacheNetworkOwnership networkOwnership,
 }) {
   client.pausePolling();
   client.resumePolling();
+  client.pauseReconnect();
+  client.resumeReconnect();
+  client.revalidateOnReconnect();
+  client.networkState;
   policy.refreshInterval;
+  policy.refreshOnReconnect;
   snapshot.isLoading;
   snapshot.isReady;
   snapshot.isFailed;

@@ -77,7 +77,8 @@ Widget createUserApp({required UserApi api, required String userId}) {
 ## Widgets
 
 - `KacheScope` exposes a client, pauses polling outside the foreground, and
-  bridges `AppLifecycleState.resumed` to policy-driven revalidation.
+  bridges `AppLifecycleState.resumed` to policy-driven revalidation. It also
+  defers reconnect work until the app returns to the foreground.
 - `KacheBuilder<T>` owns one `KacheController<T>` and rebuilds from complete
   snapshots.
 - `KacheListener<T>` performs side effects without rebuilding its child.
@@ -101,6 +102,10 @@ Set `refreshInterval` on a query policy for active polling. The scope pauses
 those timers for inactive, hidden, paused, and detached app states, then starts
 a fresh interval on resume before applying `refreshOnResume`.
 
+With a configured `KacheNetwork`, the scope keeps observing availability while
+backgrounded but pauses reconnect revalidation. Resume consumes at most one
+pending recovery. The official plugin adapter is `kache_connectivity_plus`.
+
 ## Persistence
 
 Add `kache_hive_ce` as a direct dependency when the application imports it.
@@ -115,6 +120,7 @@ the storage package.
 | Dart | Dart >=3.9.0 <4.0.0 |
 | Flutter | Flutter >=3.35.0 |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| connectivity_plus | `>=6.1.5 <7.0.0` |
 | Riverpod | `>=3.3.2 <4.0.0` |
 | Bloc | `>=9.2.1 <10.0.0` |
 | Provider | `>=6.1.5+1 <7.0.0` |

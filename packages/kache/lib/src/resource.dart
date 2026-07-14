@@ -7,6 +7,8 @@ abstract interface class _KacheResourceBase {
 
   Future<void> revalidateOnResume();
 
+  Future<void> revalidateOnReconnect();
+
   Future<void> refreshActive();
 
   void pausePolling();
@@ -139,7 +141,7 @@ final class KacheResource<T> implements _KacheResourceBase {
 
   @override
   Future<void> revalidateAfterClear() async {
-    if (!_isDisposed) {
+    if (!_isDisposed && !_entry.hasPendingClears) {
       await refresh();
     }
   }
@@ -148,6 +150,13 @@ final class KacheResource<T> implements _KacheResourceBase {
   Future<void> revalidateOnResume() async {
     if (!_isDisposed) {
       await _entry.revalidate(query, query.policy.refreshOnResume);
+    }
+  }
+
+  @override
+  Future<void> revalidateOnReconnect() async {
+    if (!_isDisposed) {
+      await _entry.revalidate(query, query.policy.refreshOnReconnect);
     }
   }
 

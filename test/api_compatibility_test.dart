@@ -19,6 +19,8 @@ void main() {
           "export 'package:kache/kache.dart';",
       'packages/kache_bloc/lib/kache_bloc.dart':
           "export 'package:kache/kache.dart';",
+      'packages/kache_connectivity_plus/lib/kache_connectivity_plus.dart':
+          "export 'package:kache/kache.dart';",
       'packages/kache_provider/lib/kache_provider.dart':
           "export 'package:kache_flutter/kache_flutter.dart';",
     };

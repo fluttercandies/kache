@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:kache/kache.dart';
+import 'package:kache_connectivity_plus/kache_connectivity_plus.dart';
 import 'package:kache_hive_ce/kache_hive_ce.dart';
 
 import 'gateway.dart';
@@ -29,6 +29,7 @@ final class ExampleRuntime {
         store: store,
         gateway: GitHubRepositoryGateway(client: networkClient),
         closeNetwork: networkClient.close,
+        network: ConnectivityPlusNetwork(),
       );
     } on Object {
       await store?.close();
@@ -41,6 +42,7 @@ final class ExampleRuntime {
   factory ExampleRuntime.fromDependencies({
     required HiveCeKacheStore store,
     required RepositoryGateway gateway,
+    KacheNetwork? network,
     void Function()? closeNetwork,
   }) {
     final binding = store.bind<RepositoryProfile>(
@@ -51,6 +53,10 @@ final class ExampleRuntime {
     final client = KacheClient(
       persistence: store,
       persistenceOwnership: KachePersistenceOwnership.owned,
+      network: network,
+      networkOwnership: network == null
+          ? KacheNetworkOwnership.borrowed
+          : KacheNetworkOwnership.owned,
     );
     final query = KacheQuery<RepositoryProfile>.persisted(
       key: KacheKey('github-repository', <Object?>['flutter/flutter']),
@@ -61,6 +67,7 @@ final class ExampleRuntime {
         expireAfter: const Duration(days: 7),
         refreshOnLoad: KacheRevalidation.always,
         refreshOnResume: KacheRevalidation.always,
+        refreshOnReconnect: KacheRevalidation.always,
       ),
       debugName: 'flutter/flutter repository',
     );

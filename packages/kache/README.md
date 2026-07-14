@@ -99,6 +99,12 @@ active. Same-key handles still share one fetch. Client owners can call
 `invalidate`, and `remove`. `KacheClient` adds `prefetch`, `peek`, namespace
 clear, global clear, active-resource refresh, and resume revalidation.
 
+Configure an optional `KacheNetwork` to revalidate after an
+`unavailable -> available` transition. Each handle keeps its own
+`refreshOnReconnect` policy, while same-key fetches remain single-flight.
+`pauseReconnect()` and `resumeReconnect()` defer one pending recovery without
+stopping state observation. Platform adapters belong in separate packages.
+
 Same-key fetches are single-flight. Writes are serialized per key. Generation
 and namespace/global epochs prevent stale work from restoring removed data.
 
@@ -127,7 +133,9 @@ the cache state machine. Lookup events report `cacheHit`, `cacheMiss`, or
 A resource handle is released only by `resource.dispose()`. Stream
 subscription cancellation is independent. `KacheClient.close()` cancels
 fetches, drains or discards queued writes according to `drainWrites`, closes
-streams, and closes only an owned persistence backend.
+streams, and closes only an owned persistence backend. An owned network source
+is also closed exactly once. Connectivity failures are observable as
+`KacheFailureKind.connectivity` events and never clear data.
 
 ## Compatibility
 
@@ -136,6 +144,7 @@ streams, and closes only an owned persistence backend.
 | Dart | Dart >=3.9.0 <4.0.0 |
 | Flutter | Flutter >=3.35.0 |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| connectivity_plus | `>=6.1.5 <7.0.0` |
 | Riverpod | `>=3.3.2 <4.0.0` |
 | Bloc | `>=9.2.1 <10.0.0` |
 | Provider | `>=6.1.5+1 <7.0.0` |

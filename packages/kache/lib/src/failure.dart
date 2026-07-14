@@ -27,6 +27,9 @@ enum KacheFailureKind {
   /// Clearing a namespace or backend failed.
   clear,
 
+  /// A network availability source failed.
+  connectivity,
+
   /// An operation was cancelled or used after lifecycle shutdown.
   lifecycle,
 }
@@ -69,6 +72,7 @@ final class KacheFailure {
     }
     final allowsGlobalScope =
         kind == KacheFailureKind.clear ||
+        kind == KacheFailureKind.connectivity ||
         kind == KacheFailureKind.lifecycle ||
         kind == KacheFailureKind.configuration;
     if (!allowsGlobalScope && key == null) {

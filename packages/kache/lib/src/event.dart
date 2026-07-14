@@ -45,6 +45,12 @@ enum KacheEventKind {
   /// A namespace or global clear completed.
   clearCompleted,
 
+  /// Automatic revalidation after network recovery started.
+  reconnectStarted,
+
+  /// Automatic revalidation after network recovery completed.
+  reconnectCompleted,
+
   /// An operation produced a classified failure.
   failure,
 

@@ -10,15 +10,31 @@ const _packagePaths = <String>[
   'packages/kache_hive_ce',
   'packages/kache_riverpod',
   'packages/kache_bloc',
+  'packages/kache_connectivity_plus',
   'packages/kache_provider',
 ];
 
+const _workspacePackagePaths = <String>[
+  '.',
+  ..._packagePaths,
+  'examples/kache_flutter_example',
+  'examples/kache_riverpod_example',
+  'examples/kache_bloc_example',
+  'examples/kache_provider_example',
+  'tool/contract_tests',
+  'tool/example_support',
+];
+
 void main() {
-  test('published package versions and SDK floors are aligned', () {
-    for (final path in _packagePaths) {
+  test('workspace package versions and SDK floors are aligned', () {
+    for (final path in _workspacePackagePaths) {
       final pubspec = _pubspec(path);
-      expect(pubspec['version'], '0.1.0');
-      expect((pubspec['environment'] as YamlMap)['sdk'], '^3.9.0');
+      expect(pubspec['version'], '1.0.0', reason: path);
+      expect(
+        (pubspec['environment'] as YamlMap)['sdk'],
+        '^3.9.0',
+        reason: path,
+      );
     }
   });
 
@@ -41,9 +57,15 @@ void main() {
     _expectDependency('packages/kache_hive_ce', 'hive_ce', '^2.19.3');
     _expectDependency('packages/kache_riverpod', 'riverpod', '^3.3.2');
     _expectDependency('packages/kache_bloc', 'bloc', '^9.2.1');
+    _expectDependency(
+      'packages/kache_connectivity_plus',
+      'connectivity_plus',
+      '^6.1.5',
+    );
     _expectDependency('packages/kache_provider', 'provider', '^6.1.5+1');
     for (final path in const <String>[
       'packages/kache_flutter',
+      'packages/kache_connectivity_plus',
       'packages/kache_provider',
     ]) {
       expect(

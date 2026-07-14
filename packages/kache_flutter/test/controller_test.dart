@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kache_flutter/kache_flutter.dart';
 
@@ -84,6 +86,40 @@ void main() {
       await client.close();
     },
   );
+
+  test('pending old-key command cannot overwrite a new binding', () async {
+    final client = KacheClient();
+    final oldFetch = Completer<String>();
+    final controller = KacheController<String>(
+      client: client,
+      query: KacheQuery<String>.memory(
+        key: KacheKey('controller-generation', <Object?>['old']),
+        fetch: (_) => oldFetch.future,
+      ),
+    );
+    var notifications = 0;
+    controller.addListener(() => notifications += 1);
+    final oldRefresh = controller.refresh();
+
+    controller.updateQuery(
+      KacheQuery<String>.memory(
+        key: KacheKey('controller-generation', <Object?>['new']),
+        policy: KachePolicy.cacheOnly(),
+      ),
+    );
+    await controller.setData('new');
+    await pumpEventQueue();
+    final notificationsBeforeOldCompletion = notifications;
+
+    oldFetch.complete('old');
+    expect((await oldRefresh).requireData, 'old');
+    await pumpEventQueue();
+
+    expect(controller.value.requireData, 'new');
+    expect(notifications, notificationsBeforeOldCompletion);
+    controller.dispose();
+    await client.close();
+  });
 
   test('dispose is idempotent and rejects later commands', () async {
     final client = KacheClient();

@@ -93,6 +93,11 @@ binding。
 `invalidate` 和 `remove`。`KacheClient` 额外提供 `prefetch`、`peek`、namespace
 清理、全量清理、活跃资源刷新和 resume 重验。
 
+配置可选 `KacheNetwork` 后，来源从 `unavailable` 变为 `available` 时自动重验。
+每个 handle 保留自己的 `refreshOnReconnect` 策略，同 key fetch 仍保持 single-flight。
+`pauseReconnect()` 和 `resumeReconnect()` 会延后一次待处理恢复，但不会停止状态观察。
+平台适配器应位于独立包中。
+
 同 key 请求自动合并；同 key 写入串行；generation 与 namespace/global epoch 会阻止
 旧任务在删除后恢复数据。
 
@@ -118,7 +123,8 @@ binding。
 
 只有 `resource.dispose()` 会释放 handle，取消 stream 监听与它相互独立。
 `KacheClient.close()` 会取消请求，按 `drainWrites` 处理写队列，关闭 stream，并且只
-关闭 owned persistence backend。
+关闭 owned persistence backend。Owned network source 同样只关闭一次。Connectivity
+失败以 `KacheFailureKind.connectivity` 事件保持可观测，且不会清除数据。
 
 ## 兼容性
 
@@ -127,6 +133,7 @@ binding。
 | Dart | Dart >=3.9.0 <4.0.0 |
 | Flutter | Flutter >=3.35.0 |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| connectivity_plus | `>=6.1.5 <7.0.0` |
 | Riverpod | `>=3.3.2 <4.0.0` |
 | Bloc | `>=9.2.1 <10.0.0` |
 | Provider | `>=6.1.5+1 <7.0.0` |

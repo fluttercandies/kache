@@ -72,14 +72,14 @@ final class _KacheScopeState extends State<KacheScope>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _lifecycleState = WidgetsBinding.instance.lifecycleState;
-    _syncPolling(widget.client);
+    _syncAutoRefresh(widget.client);
   }
 
   @override
   void didUpdateWidget(KacheScope oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.client, widget.client)) {
-      _syncPolling(widget.client);
+      _syncAutoRefresh(widget.client);
       if (oldWidget.ownership == KacheScopeOwnership.owned) {
         _closeClient(oldWidget.client, oldWidget.onError);
       }
@@ -89,7 +89,7 @@ final class _KacheScopeState extends State<KacheScope>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
-    _syncPolling(widget.client);
+    _syncAutoRefresh(widget.client);
     if (state == AppLifecycleState.resumed && !widget.client.isClosed) {
       _observe(widget.client.revalidateOnResume());
     }
@@ -119,14 +119,16 @@ final class _KacheScopeState extends State<KacheScope>
     );
   }
 
-  void _syncPolling(KacheClient client) {
+  void _syncAutoRefresh(KacheClient client) {
     if (client.isClosed) {
       return;
     }
     if (_lifecycleState == AppLifecycleState.resumed) {
       client.resumePolling();
+      client.resumeReconnect();
     } else if (_lifecycleState != null) {
       client.pausePolling();
+      client.pauseReconnect();
     }
   }
 

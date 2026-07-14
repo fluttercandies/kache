@@ -9,6 +9,8 @@ const _documents = <String, String>{
   'packages/kache_hive_ce': 'test/readme_examples/kache_hive_ce.dart',
   'packages/kache_riverpod': 'test/readme_examples/kache_riverpod.dart',
   'packages/kache_bloc': 'test/readme_examples/kache_bloc.dart',
+  'packages/kache_connectivity_plus':
+      'test/readme_examples/kache_connectivity_plus.dart',
   'packages/kache_provider': 'test/readme_examples/kache_provider.dart',
 };
 

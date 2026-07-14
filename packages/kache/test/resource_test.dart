@@ -113,6 +113,47 @@ void main() {
   });
 
   test(
+    'concurrent loads apply each handle policy before fetch deduplication',
+    () async {
+      final client = KacheClient(clock: () => now);
+      final key = KacheKey('shared-load-policies');
+      var cacheFirstFetches = 0;
+      var swrFetches = 0;
+      final cacheFirst = client.watch(
+        KacheQuery<String>.memory(
+          key: key,
+          policy: KachePolicy.cacheFirst(freshFor: const Duration(hours: 1)),
+          fetch: (_) async {
+            cacheFirstFetches += 1;
+            return 'cache-first';
+          },
+        ),
+      );
+      final swr = client.watch(
+        KacheQuery<String>.memory(
+          key: key,
+          fetch: (_) async {
+            swrFetches += 1;
+            return 'network';
+          },
+        ),
+      );
+      await cacheFirst.setData('cached');
+
+      final cacheFirstLoad = cacheFirst.load();
+      final swrLoad = swr.load();
+      expect((await cacheFirstLoad).requireData, 'cached');
+      expect((await swrLoad).requireData, 'network');
+
+      expect(cacheFirstFetches, 0);
+      expect(swrFetches, 1);
+      cacheFirst.dispose();
+      swr.dispose();
+      await client.close();
+    },
+  );
+
+  test(
     'updateQuery replaces same-key policy and fetcher without loading',
     () async {
       final client = KacheClient(clock: () => now);

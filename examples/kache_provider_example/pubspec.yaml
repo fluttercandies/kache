@@ -1,4 +1,5 @@
 name: kache_provider_example
+version: 1.0.0
 description: Example application for the Provider integration provided by Kache.
 publish_to: none
 
@@ -11,14 +12,14 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  kache_example_support: ^0.1.0
-  kache_provider: ^0.1.0
+  kache_example_support: ^1.0.0
+  kache_provider: ^1.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  kache: ^0.1.0
-  kache_hive_ce: ^0.1.0
+  kache: ^1.0.0
+  kache_hive_ce: ^1.0.0
 
 flutter:
   uses-material-design: true

@@ -67,6 +67,42 @@ void main() {
     expect(scheduler.activeTasks, hasLength(1));
   });
 
+  test('manual keepAlive survives a dependency-driven rebuild', () async {
+    final scheduler = _ManualScheduler();
+    final client = KacheClient(scheduler: scheduler.call);
+    final dependency = NotifierProvider<_Counter, int>(_Counter.new);
+    final provider = kacheProvider.autoDispose<int>(
+      client: (ref) => client,
+      query: (ref) => _query('rebuild-${ref.watch(dependency)}'),
+    );
+    final container = ProviderContainer();
+    final subscription = container.listen(
+      provider,
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    final notifier = container.read(provider.notifier);
+    addTearDown(() async {
+      container.dispose();
+      await client.close();
+    });
+
+    notifier.keepAlive();
+    container.read(dependency.notifier).increment();
+    await container.pump();
+
+    expect(container.read(provider.notifier), same(notifier));
+    expect(notifier.isKeptAlive, isTrue);
+    final tasksAfterRebuild = scheduler.activeTasks.length;
+    subscription.close();
+    await container.pump();
+    expect(scheduler.activeTasks, hasLength(tasksAfterRebuild));
+
+    notifier.releaseKeepAlive();
+    await container.pump();
+    expect(scheduler.activeTasks, hasLength(tasksAfterRebuild + 1));
+  });
+
   test('autoDispose can acquire keepAlive during provider creation', () async {
     final scheduler = _ManualScheduler();
     final client = KacheClient(scheduler: scheduler.call);
@@ -229,6 +265,13 @@ final class _ManualScheduler {
       task.run();
     }
   }
+}
+
+final class _Counter extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void increment() => state += 1;
 }
 
 final class _ManualTask implements KacheScheduledTask {

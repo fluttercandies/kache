@@ -17,7 +17,7 @@ final class _KacheWriteQueue {
     : _onSettled = onSettled;
 
   final void Function() _onSettled;
-  Future<void> _tail = Future<void>.value();
+  Future<void>? _tail;
   int _cancellationEpoch = 0;
   int _taskCount = 0;
 
@@ -31,11 +31,14 @@ final class _KacheWriteQueue {
     final previous = _tail;
     final tailCompleter = Completer<void>();
     final result = Completer<bool>();
-    _tail = tailCompleter.future;
+    final tail = tailCompleter.future;
+    _tail = tail;
     _taskCount += 1;
 
     unawaited(() async {
-      await previous;
+      if (previous != null) {
+        await previous;
+      }
       try {
         if (cancellationEpoch != _cancellationEpoch || !isValid()) {
           result.complete(false);
@@ -48,6 +51,9 @@ final class _KacheWriteQueue {
       } finally {
         _taskCount -= 1;
         tailCompleter.complete();
+        if (identical(_tail, tail)) {
+          _tail = null;
+        }
         _onSettled();
       }
     }());
@@ -56,5 +62,10 @@ final class _KacheWriteQueue {
 
   void cancelPending() => _cancellationEpoch += 1;
 
-  Future<void> drain() => _tail;
+  Future<void> drain() async {
+    final tail = _tail;
+    if (tail != null) {
+      await tail;
+    }
+  }
 }

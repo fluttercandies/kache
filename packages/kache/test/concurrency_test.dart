@@ -188,6 +188,41 @@ void main() {
     await client.close();
   });
 
+  test('overlapping clears defer refetch until the last clear', () async {
+    final backend = ScriptedPersistence();
+    final firstClearStarted = Completer<void>();
+    final firstClearGate = Completer<void>();
+    backend.onClear = () async {
+      if (backend.clearCount == 1) {
+        firstClearStarted.complete();
+        await firstClearGate.future;
+      }
+    };
+    final binding = backend.bind<String>(fingerprint: 'clear-race-v1');
+    var fetches = 0;
+    final client = KacheClient(persistence: backend, clock: () => now);
+    final resource = client.watch(
+      KacheQuery<String>.persisted(
+        key: KacheKey('overlapping-clear'),
+        binding: binding,
+        fetch: (_) async => 'network-${++fetches}',
+      ),
+    );
+    await resource.setData('cached');
+
+    final first = client.clear(refetch: true);
+    await firstClearStarted.future;
+    final second = client.clear(refetch: true);
+    firstClearGate.complete();
+
+    expect((await first).isSuccess, isTrue);
+    expect((await second).isSuccess, isTrue);
+    expect(fetches, 1);
+    expect(resource.snapshot.requireData, 'network-1');
+    resource.dispose();
+    await client.close();
+  });
+
   test('namespace clear leaves other namespace memory intact', () async {
     final client = KacheClient(clock: () => now);
     final session = client.watch(

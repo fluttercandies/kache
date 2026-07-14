@@ -58,7 +58,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   final StreamController<KacheSnapshot<T>> _changes =
       StreamController<KacheSnapshot<T>>.broadcast(sync: true);
   KacheSnapshot<T> _snapshot;
-  Future<KacheSnapshot<T>>? _loadFuture;
+  Future<void>? _readFuture;
   Future<KacheSnapshot<T>>? _fetchFuture;
   Future<void>? _maintenanceFuture;
   DateTime? _lastFetchFinishedAt;
@@ -82,6 +82,8 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   Stream<KacheSnapshot<T>> get changes => _changes.stream;
 
   DateTime? get lastFetchFinishedAt => _lastFetchFinishedAt;
+
+  bool get hasPendingClears => _pendingClears > 0;
 
   @override
   bool get canCollect =>
@@ -118,21 +120,11 @@ final class _KacheEntry<T> implements _KacheEntryBase {
 
   Future<KacheSnapshot<T>> load(KacheQuery<T> query) {
     _ensureCommandAvailable();
-    final existing = _loadFuture;
-    if (existing != null) {
-      return existing;
-    }
-    late final Future<KacheSnapshot<T>> tracked;
     _activeLoads += 1;
-    tracked = _performLoad(query).whenComplete(() {
-      if (identical(_loadFuture, tracked)) {
-        _loadFuture = null;
-      }
+    return _performLoad(query).whenComplete(() {
       _activeLoads -= 1;
       _operationSettled();
     });
-    _loadFuture = tracked;
-    return tracked;
   }
 
   Future<KacheSnapshot<T>> refresh(KacheQuery<T> query) {
@@ -160,33 +152,35 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     KacheRevalidation mode,
   ) async {
     _ensureCommandAvailable();
-    await _expireExisting(query.policy, debugName: query.debugName);
+    final classification = await _expireExisting(
+      query.policy,
+      debugName: query.debugName,
+    );
     if (query.policy.isCacheOnly || mode == KacheRevalidation.never) {
       return _snapshot;
     }
     final shouldFetch =
         !_snapshot.hasData ||
         mode == KacheRevalidation.always ||
-        _snapshot.freshness == KacheFreshness.stale;
+        classification.freshness == KacheFreshness.stale;
     return shouldFetch ? refresh(query) : _snapshot;
   }
 
   Future<KacheSnapshot<T>> _performLoad(KacheQuery<T> query) async {
-    final readPersistence = !_didReadPersistence;
-    if (!_didReadPersistence) {
-      await _readPersistence(query);
-    }
+    final readPersistence = await _awaitInitialRead(query);
     if (_isClosed || client.isClosed) {
       return _snapshot;
     }
-    final expired = await _expireExisting(
+    final classification = await _expireExisting(
       query.policy,
       debugName: query.debugName,
     );
     if (_isClosed || client.isClosed) {
       return _snapshot;
     }
-    if (!readPersistence && !expired && storageMode != KacheStorageMode.none) {
+    if (!readPersistence &&
+        !classification.expired &&
+        storageMode != KacheStorageMode.none) {
       client._emitEvent(
         kind: _snapshot.hasData
             ? KacheEventKind.cacheHit
@@ -214,7 +208,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         switch (query.policy.refreshOnLoad) {
           KacheRevalidation.never => false,
           KacheRevalidation.ifStale =>
-            _snapshot.freshness == KacheFreshness.stale,
+            classification.freshness == KacheFreshness.stale,
           KacheRevalidation.always => true,
         };
     if (shouldFetch) {
@@ -227,9 +221,32 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     return _snapshot;
   }
 
-  Future<bool> _expireExisting(KachePolicy policy, {String? debugName}) async {
-    if (!_snapshot.hasData) {
+  Future<bool> _awaitInitialRead(KacheQuery<T> query) async {
+    final existing = _readFuture;
+    if (existing != null) {
+      await existing;
+      return true;
+    }
+    if (_didReadPersistence) {
       return false;
+    }
+    late final Future<void> tracked;
+    tracked = _readPersistence(query).whenComplete(() {
+      if (identical(_readFuture, tracked)) {
+        _readFuture = null;
+      }
+    });
+    _readFuture = tracked;
+    await tracked;
+    return true;
+  }
+
+  Future<({bool expired, KacheFreshness? freshness})> _expireExisting(
+    KachePolicy policy, {
+    String? debugName,
+  }) async {
+    if (!_snapshot.hasData) {
+      return (expired: false, freshness: null);
     }
     final freshness = policy.freshnessAt(
       fetchedAt: _snapshot.fetchedAt!,
@@ -251,7 +268,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         _emitEmpty(null);
       }
       _isInvalidated = false;
-      return true;
+      return (expired: true, freshness: null);
     }
     if (freshness != _snapshot.freshness) {
       _emitReady(
@@ -263,7 +280,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         persistence: _snapshot.persistence,
       );
     }
-    return false;
+    return (expired: false, freshness: freshness);
   }
 
   Future<KacheSnapshot<T>> _fetch(
@@ -381,7 +398,6 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     _fetchCancellation?.cancel();
     _fetchCancellation = null;
     _fetchFuture = null;
-    _loadFuture = null;
   }
 
   void _operationSettled() {

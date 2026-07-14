@@ -10,6 +10,7 @@ void main() {
       expect(policy.expireAfter, isNull);
       expect(policy.refreshOnLoad, KacheRevalidation.always);
       expect(policy.refreshOnResume, KacheRevalidation.always);
+      expect(policy.refreshOnReconnect, KacheRevalidation.always);
       expect(policy.refreshInterval, isNull);
       expect(policy.retainDataOnError, isTrue);
       expect(policy.gcAfter, const Duration(minutes: 5));
@@ -36,6 +37,7 @@ void main() {
       expect(policy.expireAfter, const Duration(hours: 1));
       expect(policy.refreshOnLoad, KacheRevalidation.ifStale);
       expect(policy.refreshOnResume, KacheRevalidation.ifStale);
+      expect(policy.refreshOnReconnect, KacheRevalidation.ifStale);
       expect(policy.retainDataOnError, isTrue);
       expect(policy.isCacheOnly, isFalse);
     });
@@ -50,6 +52,7 @@ void main() {
 
       expect(policy.refreshOnLoad, KacheRevalidation.never);
       expect(policy.refreshOnResume, KacheRevalidation.never);
+      expect(policy.refreshOnReconnect, KacheRevalidation.never);
       expect(policy.isCacheOnly, isTrue);
     });
   });
@@ -127,6 +130,7 @@ void main() {
           staleAfter: const Duration(microseconds: -1),
           refreshOnLoad: KacheRevalidation.ifStale,
           refreshOnResume: KacheRevalidation.ifStale,
+          refreshOnReconnect: KacheRevalidation.ifStale,
         ),
         throwsArgumentError,
       );
@@ -136,6 +140,7 @@ void main() {
           gcAfter: const Duration(microseconds: -1),
           refreshOnLoad: KacheRevalidation.ifStale,
           refreshOnResume: KacheRevalidation.ifStale,
+          refreshOnReconnect: KacheRevalidation.ifStale,
         ),
         throwsArgumentError,
       );

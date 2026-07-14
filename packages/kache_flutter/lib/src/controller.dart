@@ -128,8 +128,9 @@ final class KacheController<T> extends ChangeNotifier
   }
 
   Future<KacheSnapshot<T>> _run(Future<KacheSnapshot<T>> operation) async {
+    final generation = _bindingGeneration;
     final snapshot = await operation;
-    if (!_isDisposed) {
+    if (!_isDisposed && generation == _bindingGeneration) {
       _accept(snapshot);
     }
     return snapshot;

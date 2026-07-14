@@ -2,6 +2,7 @@ scripts:
   - analyze:examples
   - api-check
   - benchmark
+  - build:web
   - compatibility-check
   - dependency-boundaries
   - docs
@@ -10,6 +11,7 @@ scripts:
   - test
   - test:adapter-contracts
   - test:bloc
+  - test:connectivity
   - test:core-failure-injection
   - test:core-lifecycle
   - test:examples

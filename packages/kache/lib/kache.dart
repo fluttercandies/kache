@@ -9,6 +9,7 @@ export 'src/event.dart';
 export 'src/failure.dart';
 export 'src/key.dart';
 export 'src/memory_persistence.dart';
+export 'src/network.dart';
 export 'src/persistence.dart';
 export 'src/policy.dart';
 export 'src/query.dart';

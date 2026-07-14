@@ -10,6 +10,7 @@ const _packagePaths = <String>[
   'packages/kache_hive_ce',
   'packages/kache_riverpod',
   'packages/kache_bloc',
+  'packages/kache_connectivity_plus',
   'packages/kache_provider',
 ];
 const _readmeLogo = '''<p align="center">

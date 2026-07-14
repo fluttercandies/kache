@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kache_flutter/kache_flutter.dart';
@@ -100,6 +102,46 @@ void main() {
     await client.close();
   });
 
+  testWidgets('app lifecycle defers reconnect refresh until resumed', (
+    tester,
+  ) async {
+    final network = _FakeNetwork();
+    final client = KacheClient(network: network);
+    var fetches = 0;
+    final resource = client.watch(
+      KacheQuery<int>.memory(
+        key: KacheKey('lifecycle-reconnect'),
+        policy: KachePolicy.staleWhileRevalidate(
+          refreshOnLoad: KacheRevalidation.never,
+          refreshOnResume: KacheRevalidation.never,
+        ),
+        fetch: (_) async => ++fetches,
+      ),
+    );
+    addTearDown(() async {
+      resource.dispose();
+      await client.close();
+      await network.close();
+    });
+    network.emit(KacheNetworkState.unavailable);
+    await tester.pumpWidget(
+      KacheScope(client: client, child: const SizedBox()),
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    network.emit(KacheNetworkState.available);
+    await tester.pump();
+    expect(fetches, 0);
+
+    final reconnectCompleted = client.events.firstWhere(
+      (event) => event.kind == KacheEventKind.reconnectCompleted,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(fetches, 1);
+    await reconnectCompleted;
+  });
+
   testWidgets('replacement client inherits the current inactive state', (
     tester,
   ) async {
@@ -162,4 +204,17 @@ final class _ManualTask implements KacheScheduledTask {
 
   @override
   void cancel() => isCancelled = true;
+}
+
+final class _FakeNetwork implements KacheNetwork {
+  final StreamController<KacheNetworkState> _states =
+      StreamController<KacheNetworkState>.broadcast(sync: true);
+
+  @override
+  Stream<KacheNetworkState> get states => _states.stream;
+
+  void emit(KacheNetworkState state) => _states.add(state);
+
+  @override
+  Future<void> close() => _states.close();
 }

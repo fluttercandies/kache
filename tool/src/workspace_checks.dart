@@ -10,6 +10,7 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
   'kache_hive_ce': {'hive_ce', 'kache'},
   'kache_riverpod': {'riverpod', 'kache'},
   'kache_bloc': {'bloc', 'kache'},
+  'kache_connectivity_plus': {'connectivity_plus', 'flutter', 'kache'},
   'kache_provider': {'flutter', 'provider', 'kache_flutter'},
   'kache_flutter_example': {
     'flutter',
@@ -40,6 +41,7 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
     'kache',
     'kache_flutter',
     'kache_hive_ce',
+    'kache_connectivity_plus',
   },
   'kache_contract_tests': {
     'flutter',
@@ -47,6 +49,7 @@ const Map<String, Set<String>> allowedRuntimeDependencies = {
     'kache_bloc',
     'kache_flutter',
     'kache_hive_ce',
+    'kache_connectivity_plus',
     'kache_provider',
     'kache_riverpod',
     'riverpod',
@@ -58,6 +61,7 @@ const Set<String> publishedPackages = {
   'kache',
   'kache_flutter',
   'kache_hive_ce',
+  'kache_connectivity_plus',
   'kache_riverpod',
   'kache_bloc',
   'kache_provider',

@@ -21,6 +21,7 @@ and state-management integrations are separate packages.
 | `kache` | Cache state machine, concurrency, policies, memory backend | Dart SDK only |
 | `kache_flutter` | Scope, controller, builder, listener, app lifecycle | Flutter + `kache` |
 | `kache_hive_ce` | Versioned Hive CE persistence, codecs, migrations | Hive CE + `kache` |
+| `kache_connectivity_plus` | Automatic reconnect revalidation | connectivity_plus + `kache` |
 | `kache_riverpod` | Provider/family/auto-dispose notifier integration | Riverpod + `kache` |
 | `kache_bloc` | `KacheCubit` and composable binding | Bloc + `kache` |
 | `kache_provider` | Provider widgets and context helpers | Provider + `kache_flutter` |
@@ -100,6 +101,18 @@ active. Same-key polling remains single-flight. `pausePolling()` and
 `resumePolling()` control timers without disabling manual cache commands.
 `KacheQuery.networkOnly` accepts the same interval without enabling a cache.
 
+## Network recovery
+
+The core accepts any `KacheNetwork` implementation and remains Dart SDK-only.
+When a configured source changes from `unavailable` to `available`, active
+handles apply their own `refreshOnReconnect` policy. Reconnect requests are
+single-flight and coalesce to at most one trailing pass.
+
+Flutter apps can use `kache_connectivity_plus` as the official adapter. Network
+interface availability is only a retry signal, not proof that the Internet or
+an endpoint is reachable. Source errors are reported as connectivity events
+without discarding cached data.
+
 ## Persistence
 
 `KacheClient()` is memory-only. To survive restarts, configure a
@@ -147,8 +160,9 @@ backends at the application boundary.
 
 Flutter applications should use `KacheScope`, which can own the client and
 pause polling outside the foreground before revalidating active resources when
-the app resumes. State adapters own their resource handles but never own the
-supplied client.
+the app resumes. It also defers reconnect work outside the foreground and
+consumes one pending recovery on resume. State adapters own their resource
+handles but never own the supplied client.
 
 ## Compatibility
 
@@ -157,6 +171,7 @@ supplied client.
 | Dart | Dart >=3.9.0 <4.0.0 |
 | Flutter | Flutter >=3.35.0 |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| connectivity_plus | `>=6.1.5 <7.0.0` |
 | Riverpod | `>=3.3.2 <4.0.0` |
 | Bloc | `>=9.2.1 <10.0.0` |
 | Provider | `>=6.1.5+1 <7.0.0` |
@@ -165,8 +180,8 @@ supplied client.
 
 The `examples/` directory contains runnable Flutter, Riverpod, Bloc/Cubit, and
 Provider applications. Each uses the GitHub repository API and Hive CE to
-demonstrate cold loading, disk-cache-first restart, refresh, retained data on
-failure, and explicit cache clearing.
+demonstrate cold loading, disk-cache-first restart, refresh, reconnect
+revalidation, retained data on failure, and explicit cache clearing.
 
 ## License
 

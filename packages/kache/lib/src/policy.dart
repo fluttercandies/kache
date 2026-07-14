@@ -27,6 +27,7 @@ final class KachePolicy {
     Duration? expireAfter,
     required KacheRevalidation refreshOnLoad,
     required KacheRevalidation refreshOnResume,
+    required KacheRevalidation refreshOnReconnect,
     Duration? refreshInterval,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
@@ -35,6 +36,7 @@ final class KachePolicy {
     expireAfter: expireAfter,
     refreshOnLoad: refreshOnLoad,
     refreshOnResume: refreshOnResume,
+    refreshOnReconnect: refreshOnReconnect,
     refreshInterval: refreshInterval,
     retainDataOnError: retainDataOnError,
     gcAfter: gcAfter,
@@ -47,6 +49,7 @@ final class KachePolicy {
     Duration? expireAfter,
     KacheRevalidation refreshOnLoad = KacheRevalidation.always,
     KacheRevalidation refreshOnResume = KacheRevalidation.always,
+    KacheRevalidation refreshOnReconnect = KacheRevalidation.always,
     Duration? refreshInterval,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
@@ -55,6 +58,7 @@ final class KachePolicy {
     expireAfter: expireAfter,
     refreshOnLoad: refreshOnLoad,
     refreshOnResume: refreshOnResume,
+    refreshOnReconnect: refreshOnReconnect,
     refreshInterval: refreshInterval,
     retainDataOnError: retainDataOnError,
     gcAfter: gcAfter,
@@ -67,6 +71,7 @@ final class KachePolicy {
     Duration? expireAfter,
     KacheRevalidation refreshOnLoad = KacheRevalidation.ifStale,
     KacheRevalidation refreshOnResume = KacheRevalidation.ifStale,
+    KacheRevalidation refreshOnReconnect = KacheRevalidation.ifStale,
     Duration? refreshInterval,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
@@ -75,6 +80,7 @@ final class KachePolicy {
     expireAfter: expireAfter,
     refreshOnLoad: refreshOnLoad,
     refreshOnResume: refreshOnResume,
+    refreshOnReconnect: refreshOnReconnect,
     refreshInterval: refreshInterval,
     retainDataOnError: retainDataOnError,
     gcAfter: gcAfter,
@@ -95,6 +101,7 @@ final class KachePolicy {
     expireAfter: expireAfter,
     refreshOnLoad: KacheRevalidation.never,
     refreshOnResume: KacheRevalidation.never,
+    refreshOnReconnect: KacheRevalidation.never,
     refreshInterval: null,
     retainDataOnError: retainDataOnError,
     gcAfter: gcAfter,
@@ -106,6 +113,7 @@ final class KachePolicy {
     required Duration? expireAfter,
     required KacheRevalidation refreshOnLoad,
     required KacheRevalidation refreshOnResume,
+    required KacheRevalidation refreshOnReconnect,
     required Duration? refreshInterval,
     required bool retainDataOnError,
     required Duration gcAfter,
@@ -149,6 +157,7 @@ final class KachePolicy {
       expireAfter: expireAfter,
       refreshOnLoad: refreshOnLoad,
       refreshOnResume: refreshOnResume,
+      refreshOnReconnect: refreshOnReconnect,
       refreshInterval: refreshInterval,
       retainDataOnError: retainDataOnError,
       gcAfter: gcAfter,
@@ -161,6 +170,7 @@ final class KachePolicy {
     required this.expireAfter,
     required this.refreshOnLoad,
     required this.refreshOnResume,
+    required this.refreshOnReconnect,
     required this.refreshInterval,
     required this.retainDataOnError,
     required this.gcAfter,
@@ -178,6 +188,9 @@ final class KachePolicy {
 
   /// Automatic revalidation behavior when its host application resumes.
   final KacheRevalidation refreshOnResume;
+
+  /// Automatic revalidation behavior after network availability returns.
+  final KacheRevalidation refreshOnReconnect;
 
   /// Optional interval between automatic refresh attempts while active.
   final Duration? refreshInterval;
@@ -217,6 +230,7 @@ final class KachePolicy {
           expireAfter == other.expireAfter &&
           refreshOnLoad == other.refreshOnLoad &&
           refreshOnResume == other.refreshOnResume &&
+          refreshOnReconnect == other.refreshOnReconnect &&
           refreshInterval == other.refreshInterval &&
           retainDataOnError == other.retainDataOnError &&
           gcAfter == other.gcAfter &&
@@ -228,6 +242,7 @@ final class KachePolicy {
     expireAfter,
     refreshOnLoad,
     refreshOnResume,
+    refreshOnReconnect,
     refreshInterval,
     retainDataOnError,
     gcAfter,

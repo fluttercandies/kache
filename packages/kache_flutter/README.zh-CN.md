@@ -77,7 +77,8 @@ Widget createUserApp({required UserApi api, required String userId}) {
 ## 组件
 
 - `KacheScope` 提供 client，在离开前台时暂停轮询，并把
-  `AppLifecycleState.resumed` 桥接到策略驱动重验。
+  `AppLifecycleState.resumed` 桥接到策略驱动重验；reconnect 工作也会延后到应用
+  返回前台。
 - `KacheBuilder<T>` 拥有一个 `KacheController<T>`，根据完整快照重建。
 - `KacheListener<T>` 执行副作用，不重建 child。
 - `KacheController<T>` 实现 `ValueListenable<KacheSnapshot<T>>`，并暴露所有资源命令。
@@ -98,6 +99,9 @@ Widget 收到相同 key 的新 query 时，controller 只更新 handle 的 fetch
 hidden、paused 和 detached 状态暂停计时器，恢复时重新计算完整周期，再执行
 `refreshOnResume`。
 
+配置 `KacheNetwork` 后，scope 在后台仍观察可用性，但暂停 reconnect 重验；恢复时
+最多消费一次待处理恢复。官方插件适配包是 `kache_connectivity_plus`。
+
 ## 持久化
 
 应用直接 import Hive CE 接口时，应显式依赖 `kache_hive_ce`。创建 scope 前打开 store，
@@ -111,6 +115,7 @@ hidden、paused 和 detached 状态暂停计时器，恢复时重新计算完整
 | Dart | Dart >=3.9.0 <4.0.0 |
 | Flutter | Flutter >=3.35.0 |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| connectivity_plus | `>=6.1.5 <7.0.0` |
 | Riverpod | `>=3.3.2 <4.0.0` |
 | Bloc | `>=9.2.1 <10.0.0` |
 | Provider | `>=6.1.5+1 <7.0.0` |
