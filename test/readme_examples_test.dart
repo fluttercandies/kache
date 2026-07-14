@@ -26,8 +26,8 @@ void main() {
       expect(chinese, contains('[English](README.md)'));
       expect(english, contains(fencedExample));
       expect(chinese, contains(fencedExample));
-      expect(english, contains('Dart >=3.9.0 <4.0.0'));
-      expect(chinese, contains('Dart >=3.9.0 <4.0.0'));
+      expect(english, contains('## Compatibility'));
+      expect(chinese, contains('## 兼容性'));
     }
   });
 

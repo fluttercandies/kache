@@ -271,14 +271,15 @@ KacheQuery<int> _query({
   required KacheKey key,
   required Duration interval,
   required KacheFetcher<int> fetch,
-}) => KacheQuery<int>.memory(
-  key: key,
-  fetch: fetch,
-  policy: KachePolicy.cacheFirst(
-    freshFor: const Duration(hours: 1),
-    refreshInterval: interval,
-  ),
-);
+}) =>
+    KacheQuery<int>.memory(
+      key: key,
+      fetch: fetch,
+      policy: KachePolicy.cacheFirst(
+        freshFor: const Duration(hours: 1),
+        refreshInterval: interval,
+      ),
+    );
 
 final class _ManualTime {
   DateTime now = DateTime.utc(2026, 10, 11);
@@ -297,9 +298,10 @@ final class _ManualTime {
   Future<void> elapse(Duration duration) async {
     final target = now.add(duration);
     while (true) {
-      final due =
-          activeTasks.where((task) => !task.dueAt.isAfter(target)).toList()
-            ..sort((left, right) => left.dueAt.compareTo(right.dueAt));
+      final due = activeTasks
+          .where((task) => !task.dueAt.isAfter(target))
+          .toList()
+        ..sort((left, right) => left.dueAt.compareTo(right.dueAt));
       if (due.isEmpty) {
         break;
       }

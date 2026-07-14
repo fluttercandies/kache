@@ -80,7 +80,7 @@ abstract class KachePersistenceBinding<T> {
   ///
   /// Throws [KachePersistenceBindingException] for an invalid fingerprint.
   KachePersistenceBinding({required this.backend, required String fingerprint})
-    : fingerprint = _validateFingerprint(fingerprint);
+      : fingerprint = _validateFingerprint(fingerprint);
 
   /// The only backend instance that may use this binding.
   final KachePersistenceBackend backend;
@@ -102,10 +102,10 @@ abstract class KachePersistenceBinding<T> {
 /// Reports invalid persistence binding configuration without rendering it.
 final class KachePersistenceBindingException implements Exception {
   const KachePersistenceBindingException._emptyFingerprint()
-    : _message = 'Persistence binding fingerprint must not be empty.';
+      : _message = 'Persistence binding fingerprint must not be empty.';
 
   const KachePersistenceBindingException._backendMismatch()
-    : _message = 'Persistence binding belongs to a different backend.';
+      : _message = 'Persistence binding belongs to a different backend.';
 
   final String _message;
 
@@ -121,7 +121,8 @@ final class KachePersistedMetadata {
   factory KachePersistedMetadata({
     required DateTime fetchedAt,
     bool isInvalidated = false,
-  }) => KachePersistedMetadata._(fetchedAt.toUtc(), isInvalidated);
+  }) =>
+      KachePersistedMetadata._(fetchedAt.toUtc(), isInvalidated);
 
   const KachePersistedMetadata._(this.fetchedAt, this.isInvalidated);
 
@@ -316,8 +317,7 @@ final class KachePersistenceException implements Exception {
   final StackTrace stackTrace;
 
   @override
-  String toString() =>
-      'KachePersistenceException('
+  String toString() => 'KachePersistenceException('
       'operation: ${operation.name}, stage: ${stage.name})';
 }
 
@@ -331,16 +331,18 @@ String _validateFingerprint(String fingerprint) {
 bool _isValidPersistenceStage(
   KachePersistenceOperation operation,
   KachePersistenceStage stage,
-) => switch (operation) {
-  KachePersistenceOperation.read =>
-    stage == KachePersistenceStage.backend ||
-        stage == KachePersistenceStage.decode ||
-        stage == KachePersistenceStage.migration,
-  KachePersistenceOperation.write =>
-    stage == KachePersistenceStage.backend ||
-        stage == KachePersistenceStage.encode,
-  KachePersistenceOperation.delete ||
-  KachePersistenceOperation.clearNamespace ||
-  KachePersistenceOperation.clear ||
-  KachePersistenceOperation.close => stage == KachePersistenceStage.backend,
-};
+) =>
+    switch (operation) {
+      KachePersistenceOperation.read =>
+        stage == KachePersistenceStage.backend ||
+            stage == KachePersistenceStage.decode ||
+            stage == KachePersistenceStage.migration,
+      KachePersistenceOperation.write =>
+        stage == KachePersistenceStage.backend ||
+            stage == KachePersistenceStage.encode,
+      KachePersistenceOperation.delete ||
+      KachePersistenceOperation.clearNamespace ||
+      KachePersistenceOperation.clear ||
+      KachePersistenceOperation.close =>
+        stage == KachePersistenceStage.backend,
+    };

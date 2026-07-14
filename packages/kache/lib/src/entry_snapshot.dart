@@ -91,32 +91,33 @@ extension _KacheEntrySnapshotExtensions<T> on _KacheEntry<T> {
     bool isRefreshing = false,
     KacheFailure? failure,
     required KachePersistenceState? persistence,
-  }) => _emit(
-    KacheSnapshot<T>.ready(
-      data: data,
-      freshness: freshness,
-      source: source,
-      fetchedAt: fetchedAt,
-      isRefreshing: isRefreshing,
-      failure: failure,
-      revision: _snapshot.revision + 1,
-      persistence: persistence,
-    ),
-  );
+  }) =>
+      _emit(
+        KacheSnapshot<T>.ready(
+          data: data,
+          freshness: freshness,
+          source: source,
+          fetchedAt: fetchedAt,
+          isRefreshing: isRefreshing,
+          failure: failure,
+          revision: _snapshot.revision + 1,
+          persistence: persistence,
+        ),
+      );
 
   void _emitLoading(KachePersistenceState? persistence) => _emit(
-    KacheSnapshot<T>.loading(
-      revision: _snapshot.revision + 1,
-      persistence: persistence,
-    ),
-  );
+        KacheSnapshot<T>.loading(
+          revision: _snapshot.revision + 1,
+          persistence: persistence,
+        ),
+      );
 
   void _emitEmpty(KachePersistenceState? persistence) => _emit(
-    KacheSnapshot<T>.idle(
-      revision: _snapshot.revision + 1,
-      persistence: persistence,
-    ),
-  );
+        KacheSnapshot<T>.idle(
+          revision: _snapshot.revision + 1,
+          persistence: persistence,
+        ),
+      );
 
   void _emitFailed(KacheFailure failure, KachePersistenceState? persistence) =>
       _emit(

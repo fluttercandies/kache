@@ -467,20 +467,20 @@ void main() {
 
 const _validPersistenceStages =
     <KachePersistenceOperation, Set<KachePersistenceStage>>{
-      KachePersistenceOperation.read: {
-        KachePersistenceStage.backend,
-        KachePersistenceStage.decode,
-        KachePersistenceStage.migration,
-      },
-      KachePersistenceOperation.write: {
-        KachePersistenceStage.backend,
-        KachePersistenceStage.encode,
-      },
-      KachePersistenceOperation.delete: {KachePersistenceStage.backend},
-      KachePersistenceOperation.clearNamespace: {KachePersistenceStage.backend},
-      KachePersistenceOperation.clear: {KachePersistenceStage.backend},
-      KachePersistenceOperation.close: {KachePersistenceStage.backend},
-    };
+  KachePersistenceOperation.read: {
+    KachePersistenceStage.backend,
+    KachePersistenceStage.decode,
+    KachePersistenceStage.migration,
+  },
+  KachePersistenceOperation.write: {
+    KachePersistenceStage.backend,
+    KachePersistenceStage.encode,
+  },
+  KachePersistenceOperation.delete: {KachePersistenceStage.backend},
+  KachePersistenceOperation.clearNamespace: {KachePersistenceStage.backend},
+  KachePersistenceOperation.clear: {KachePersistenceStage.backend},
+  KachePersistenceOperation.close: {KachePersistenceStage.backend},
+};
 
 final class _Binding<T> extends KachePersistenceBinding<T> {
   _Binding({required super.backend, required super.fingerprint});

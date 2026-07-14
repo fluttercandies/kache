@@ -191,15 +191,22 @@ handles but never own the supplied client.
 
 ## Compatibility
 
-| Component | Supported range |
-| --- | --- |
-| Dart | Dart >=3.9.0 <4.0.0 |
-| Flutter | Flutter >=3.35.0 |
-| Hive CE | `>=2.19.3 <3.0.0` |
-| connectivity_plus | `>=6.1.5 <7.0.0` |
-| Riverpod | `>=3.3.2 <4.0.0` |
-| Bloc | `>=9.2.1 <10.0.0` |
-| Provider | `>=6.1.5+1 <7.0.0` |
+Each published package declares and tests its own minimum SDK instead of
+inheriting the newer toolchain used by this monorepo.
+
+| Package | Dart | Flutter |
+| --- | --- | --- |
+| `kache` | >=3.5.0 <4.0.0 | Not required |
+| `kache_flutter` | >=3.5.0 <4.0.0 | >=3.24.0 |
+| `kache_hive_ce` | >=3.5.0 <4.0.0 | Not required |
+| `kache_riverpod` | >=3.7.0 <4.0.0 | Not required |
+| `kache_bloc` | >=3.5.0 <4.0.0 | Not required |
+| `kache_connectivity_plus` | >=3.5.0 <4.0.0 | >=3.24.0 |
+| `kache_provider` | >=3.5.0 <4.0.0 | >=3.24.0 |
+
+Official adapters track Hive CE `>=2.19.3 <3.0.0`, connectivity_plus
+`>=7.2.0 <8.0.0`, Riverpod `>=3.3.2 <4.0.0`, Bloc
+`>=9.2.1 <10.0.0`, and Provider `>=6.1.5+1 <7.0.0`.
 
 ## Examples
 

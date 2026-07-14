@@ -8,7 +8,7 @@ final class KacheController<T> extends ChangeNotifier
     implements ValueListenable<KacheSnapshot<T>> {
   /// Creates a controller and starts loading when its resource stream is bound.
   KacheController({required this.client, required KacheQuery<T> query})
-    : _query = query {
+      : _query = query {
     _bind(query);
   }
 

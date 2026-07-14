@@ -2,6 +2,7 @@ scripts:
   - analyze:examples
   - api-check
   - benchmark
+  - build:android
   - build:web
   - compatibility-check
   - dependency-boundaries

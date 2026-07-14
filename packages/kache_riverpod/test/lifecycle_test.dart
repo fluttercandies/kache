@@ -217,11 +217,12 @@ void main() {
       final fetch = Completer<int>();
       final provider = kacheProvider.autoDispose<int>(
         client: (ref) => client,
-        query: (ref) => KacheQuery.memory(
-          key: KacheKey('riverpod-lifecycle', <Object?>['pending']),
-          fetch: (context) => fetch.future,
-          policy: KachePolicy.staleWhileRevalidate(gcAfter: Duration.zero),
-        ),
+        query:
+            (ref) => KacheQuery.memory(
+              key: KacheKey('riverpod-lifecycle', <Object?>['pending']),
+              fetch: (context) => fetch.future,
+              policy: KachePolicy.staleWhileRevalidate(gcAfter: Duration.zero),
+            ),
       );
       final container = ProviderContainer();
       final subscription = container.listen(

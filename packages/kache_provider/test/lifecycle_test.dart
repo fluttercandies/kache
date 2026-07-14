@@ -110,6 +110,6 @@ void main() {
 }
 
 KacheQuery<int> _cacheOnlyQuery(String id) => KacheQuery.memory(
-  key: KacheKey('provider-lifecycle', <Object?>[id]),
-  policy: KachePolicy.cacheOnly(),
-);
+      key: KacheKey('provider-lifecycle', <Object?>[id]),
+      policy: KachePolicy.cacheOnly(),
+    );

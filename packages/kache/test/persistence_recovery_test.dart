@@ -81,9 +81,9 @@ void main() {
         metadata: KachePersistedMetadata(fetchedAt: now),
       )
       ..maintenance = () => throw persistenceException(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.migration,
-      );
+            operation: KachePersistenceOperation.read,
+            stage: KachePersistenceStage.migration,
+          );
     final binding = backend.bind<String>(fingerprint: 'profile-v2');
     final client = KacheClient(persistence: backend, clock: () => now);
     final resource = client.watch(

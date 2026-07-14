@@ -13,16 +13,17 @@ void main() {
       var fetchCount = 0;
       final provider = kacheProvider<String>(
         client: (ref) => client,
-        query: (ref) => KacheQuery.memory(
-          key: KacheKey('riverpod', <Object?>['profile']),
-          fetch: (context) {
-            fetchCount += 1;
-            if (fetchCount == 1) {
-              return initialFetch.future;
-            }
-            return Future<String>.error(StateError('offline'));
-          },
-        ),
+        query:
+            (ref) => KacheQuery.memory(
+              key: KacheKey('riverpod', <Object?>['profile']),
+              fetch: (context) {
+                fetchCount += 1;
+                if (fetchCount == 1) {
+                  return initialFetch.future;
+                }
+                return Future<String>.error(StateError('offline'));
+              },
+            ),
       );
       final container = ProviderContainer();
       final subscription = container.listen(
@@ -65,10 +66,11 @@ void main() {
     final client = KacheClient();
     final provider = kacheProvider<int>(
       client: (ref) => client,
-      query: (ref) => KacheQuery.memory(
-        key: KacheKey('riverpod', <Object?>['counter']),
-        policy: KachePolicy.cacheOnly(),
-      ),
+      query:
+          (ref) => KacheQuery.memory(
+            key: KacheKey('riverpod', <Object?>['counter']),
+            policy: KachePolicy.cacheOnly(),
+          ),
     );
     final container = ProviderContainer();
     final subscription = container.listen(

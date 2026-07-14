@@ -13,7 +13,7 @@ final class ConnectivityPlusNetwork implements KacheNetwork {
   /// Pass [connectivity] to replace the platform dependency in tests or hosts
   /// that already manage a compatible [Connectivity] implementation.
   ConnectivityPlusNetwork({Connectivity? connectivity})
-    : _connectivity = connectivity ?? Connectivity();
+      : _connectivity = connectivity ?? Connectivity();
 
   final Connectivity _connectivity;
   final StreamController<_StateRevision> _updates =

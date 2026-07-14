@@ -63,7 +63,7 @@ void main() {
     final current = _textBinding(
       store,
       schema: 2,
-      migrate: (_, _) => throw StateError('migration failed'),
+      migrate: (_, __) => throw StateError('migration failed'),
     );
 
     await expectLater(
@@ -237,14 +237,15 @@ HiveCeBinding<String> _textBinding(
   HiveCeKacheStore store, {
   required int schema,
   HiveCeMigrator<String>? migrate,
-}) => store.bind<String>(
-  codecId: 'text',
-  schema: schema,
-  codec: _textCodec,
-  migrate: migrate,
-);
+}) =>
+    store.bind<String>(
+      codecId: 'text',
+      schema: schema,
+      codec: _textCodec,
+      migrate: migrate,
+    );
 
 Future<HiveCeKacheStore> _memoryStore(String label) => HiveCeKacheStore.open(
-  boxName: 'kache_${label}_${DateTime.now().microsecondsSinceEpoch}',
-  bytes: Uint8List(0),
-);
+      boxName: 'kache_${label}_${DateTime.now().microsecondsSinceEpoch}',
+      bytes: Uint8List(0),
+    );

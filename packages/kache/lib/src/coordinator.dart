@@ -14,7 +14,7 @@ final class _KacheOperationVersion {
 
 final class _KacheWriteQueue {
   _KacheWriteQueue({required void Function() onSettled})
-    : _onSettled = onSettled;
+      : _onSettled = onSettled;
 
   final void Function() _onSettled;
   Future<void>? _tail;

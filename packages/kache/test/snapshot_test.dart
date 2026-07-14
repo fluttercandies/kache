@@ -205,16 +205,16 @@ void main() {
 }
 
 KacheFailure _fetchFailure(KacheKey key) => KacheFailure(
-  kind: KacheFailureKind.fetch,
-  key: key,
-  cause: StateError('offline'),
-  stackTrace: StackTrace.current,
-);
+      kind: KacheFailureKind.fetch,
+      key: key,
+      cause: StateError('offline'),
+      stackTrace: StackTrace.current,
+    );
 
 KacheFailure _persistenceFailure(KacheKey key) => KacheFailure(
-  kind: KacheFailureKind.persistenceRead,
-  key: key,
-  cause: StateError('read failed'),
-  stackTrace: StackTrace.current,
-  persistenceStage: KachePersistenceStage.backend,
-);
+      kind: KacheFailureKind.persistenceRead,
+      key: key,
+      cause: StateError('read failed'),
+      stackTrace: StackTrace.current,
+      persistenceStage: KachePersistenceStage.backend,
+    );

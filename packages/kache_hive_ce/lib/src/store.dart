@@ -33,13 +33,13 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   factory HiveCeKacheStore.fromBox(
     Box<Object?> box, {
     HiveCeBoxOwnership ownership = HiveCeBoxOwnership.borrowed,
-  }) => HiveCeKacheStore._(
-    box: box,
-    boxOwnership: ownership,
-    releaseBox: ownership == HiveCeBoxOwnership.owned
-        ? box.close
-        : _completeVoid,
-  );
+  }) =>
+      HiveCeKacheStore._(
+        box: box,
+        boxOwnership: ownership,
+        releaseBox:
+            ownership == HiveCeBoxOwnership.owned ? box.close : _completeVoid,
+      );
 
   /// Opens or leases a Hive box.
   ///

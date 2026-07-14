@@ -67,7 +67,8 @@ void main() {
     expect(
       (await cubit.updateData(
         (snapshot) => snapshot.requireData + 1,
-      )).requireData,
+      ))
+          .requireData,
       2,
     );
     expect(
@@ -92,13 +93,13 @@ void main() {
 
 final class _ProfileCubit extends KacheCubit<String> {
   _ProfileCubit(KacheClient client)
-    : super(
-        client: client,
-        query: KacheQuery.memory(
-          key: KacheKey('bloc', <Object?>['subclass']),
-          policy: KachePolicy.cacheOnly(),
-        ),
-      );
+      : super(
+          client: client,
+          query: KacheQuery.memory(
+            key: KacheKey('bloc', <Object?>['subclass']),
+            policy: KachePolicy.cacheOnly(),
+          ),
+        );
 
   Future<KacheSnapshot<String>> rename(String name) => setData(name);
 }

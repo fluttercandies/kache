@@ -31,17 +31,18 @@ final class KachePolicy {
     Duration? refreshInterval,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
-  }) => KachePolicy._validated(
-    staleAfter: staleAfter,
-    expireAfter: expireAfter,
-    refreshOnLoad: refreshOnLoad,
-    refreshOnResume: refreshOnResume,
-    refreshOnReconnect: refreshOnReconnect,
-    refreshInterval: refreshInterval,
-    retainDataOnError: retainDataOnError,
-    gcAfter: gcAfter,
-    isCacheOnly: false,
-  );
+  }) =>
+      KachePolicy._validated(
+        staleAfter: staleAfter,
+        expireAfter: expireAfter,
+        refreshOnLoad: refreshOnLoad,
+        refreshOnResume: refreshOnResume,
+        refreshOnReconnect: refreshOnReconnect,
+        refreshInterval: refreshInterval,
+        retainDataOnError: retainDataOnError,
+        gcAfter: gcAfter,
+        isCacheOnly: false,
+      );
 
   /// Creates the default stale-while-revalidate policy.
   factory KachePolicy.staleWhileRevalidate({
@@ -53,17 +54,18 @@ final class KachePolicy {
     Duration? refreshInterval,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
-  }) => KachePolicy._validated(
-    staleAfter: staleAfter,
-    expireAfter: expireAfter,
-    refreshOnLoad: refreshOnLoad,
-    refreshOnResume: refreshOnResume,
-    refreshOnReconnect: refreshOnReconnect,
-    refreshInterval: refreshInterval,
-    retainDataOnError: retainDataOnError,
-    gcAfter: gcAfter,
-    isCacheOnly: false,
-  );
+  }) =>
+      KachePolicy._validated(
+        staleAfter: staleAfter,
+        expireAfter: expireAfter,
+        refreshOnLoad: refreshOnLoad,
+        refreshOnResume: refreshOnResume,
+        refreshOnReconnect: refreshOnReconnect,
+        refreshInterval: refreshInterval,
+        retainDataOnError: retainDataOnError,
+        gcAfter: gcAfter,
+        isCacheOnly: false,
+      );
 
   /// Creates a cache-first policy with [freshFor] as its fresh window.
   factory KachePolicy.cacheFirst({
@@ -75,17 +77,18 @@ final class KachePolicy {
     Duration? refreshInterval,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
-  }) => KachePolicy._validated(
-    staleAfter: freshFor,
-    expireAfter: expireAfter,
-    refreshOnLoad: refreshOnLoad,
-    refreshOnResume: refreshOnResume,
-    refreshOnReconnect: refreshOnReconnect,
-    refreshInterval: refreshInterval,
-    retainDataOnError: retainDataOnError,
-    gcAfter: gcAfter,
-    isCacheOnly: false,
-  );
+  }) =>
+      KachePolicy._validated(
+        staleAfter: freshFor,
+        expireAfter: expireAfter,
+        refreshOnLoad: refreshOnLoad,
+        refreshOnResume: refreshOnResume,
+        refreshOnReconnect: refreshOnReconnect,
+        refreshInterval: refreshInterval,
+        retainDataOnError: retainDataOnError,
+        gcAfter: gcAfter,
+        isCacheOnly: false,
+      );
 
   /// Creates a policy that never fetches automatically.
   ///
@@ -96,17 +99,18 @@ final class KachePolicy {
     Duration? expireAfter,
     bool retainDataOnError = true,
     Duration gcAfter = const Duration(minutes: 5),
-  }) => KachePolicy._validated(
-    staleAfter: staleAfter,
-    expireAfter: expireAfter,
-    refreshOnLoad: KacheRevalidation.never,
-    refreshOnResume: KacheRevalidation.never,
-    refreshOnReconnect: KacheRevalidation.never,
-    refreshInterval: null,
-    retainDataOnError: retainDataOnError,
-    gcAfter: gcAfter,
-    isCacheOnly: true,
-  );
+  }) =>
+      KachePolicy._validated(
+        staleAfter: staleAfter,
+        expireAfter: expireAfter,
+        refreshOnLoad: KacheRevalidation.never,
+        refreshOnResume: KacheRevalidation.never,
+        refreshOnReconnect: KacheRevalidation.never,
+        refreshInterval: null,
+        retainDataOnError: retainDataOnError,
+        gcAfter: gcAfter,
+        isCacheOnly: true,
+      );
 
   factory KachePolicy._validated({
     required Duration staleAfter,
@@ -238,14 +242,14 @@ final class KachePolicy {
 
   @override
   int get hashCode => Object.hash(
-    staleAfter,
-    expireAfter,
-    refreshOnLoad,
-    refreshOnResume,
-    refreshOnReconnect,
-    refreshInterval,
-    retainDataOnError,
-    gcAfter,
-    isCacheOnly,
-  );
+        staleAfter,
+        expireAfter,
+        refreshOnLoad,
+        refreshOnResume,
+        refreshOnReconnect,
+        refreshInterval,
+        retainDataOnError,
+        gcAfter,
+        isCacheOnly,
+      );
 }

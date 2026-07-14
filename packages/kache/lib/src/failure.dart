@@ -70,8 +70,7 @@ final class KacheFailure {
     if (namespace != null && kind != KacheFailureKind.clear) {
       throw ArgumentError('Only clear failures may target a namespace.');
     }
-    final allowsGlobalScope =
-        kind == KacheFailureKind.clear ||
+    final allowsGlobalScope = kind == KacheFailureKind.clear ||
         kind == KacheFailureKind.connectivity ||
         kind == KacheFailureKind.lifecycle ||
         kind == KacheFailureKind.configuration;
@@ -80,8 +79,7 @@ final class KacheFailure {
         'Only clear failures may omit a key or target a namespace.',
       );
     }
-    final isPersistence =
-        kind == KacheFailureKind.persistenceRead ||
+    final isPersistence = kind == KacheFailureKind.persistenceRead ||
         kind == KacheFailureKind.persistenceWrite ||
         kind == KacheFailureKind.delete ||
         kind == KacheFailureKind.clear;
@@ -107,8 +105,8 @@ final class KacheFailure {
   KacheFailureScope get scope => key != null
       ? KacheFailureScope.key
       : namespace != null
-      ? KacheFailureScope.namespace
-      : KacheFailureScope.global;
+          ? KacheFailureScope.namespace
+          : KacheFailureScope.global;
 
   /// The original error object.
   final Object cause;
@@ -125,7 +123,7 @@ final class KacheFailure {
     return stage == null
         ? 'KacheFailure(kind: ${kind.name}, scope: ${scope.name})'
         : 'KacheFailure('
-              'kind: ${kind.name}, scope: ${scope.name}, stage: ${stage.name})';
+            'kind: ${kind.name}, scope: ${scope.name}, stage: ${stage.name})';
   }
 }
 

@@ -6,9 +6,9 @@ import 'failure.dart';
 final class KacheClearResult {
   /// Creates a result containing every failure observed by the clear.
   KacheClearResult({Iterable<KacheFailure> failures = const <KacheFailure>[]})
-    : failures = UnmodifiableListView<KacheFailure>(
-        List<KacheFailure>.of(failures),
-      );
+      : failures = UnmodifiableListView<KacheFailure>(
+          List<KacheFailure>.of(failures),
+        );
 
   /// Failures observed while clearing memory or persistence.
   final List<KacheFailure> failures;
@@ -28,9 +28,9 @@ final class KacheClearResult {
 final class KacheCommandException implements Exception {
   /// Creates an exception containing an immutable copy of [failures].
   KacheCommandException(Iterable<KacheFailure> failures)
-    : failures = UnmodifiableListView<KacheFailure>(
-        List<KacheFailure>.of(failures),
-      );
+      : failures = UnmodifiableListView<KacheFailure>(
+          List<KacheFailure>.of(failures),
+        );
 
   /// Failures produced by the command.
   final List<KacheFailure> failures;

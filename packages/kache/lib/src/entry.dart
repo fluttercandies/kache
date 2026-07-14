@@ -28,15 +28,15 @@ abstract class _KacheEntryBase {
 
 final class _KacheEntry<T> implements _KacheEntryBase {
   _KacheEntry({required this.client, required KacheQuery<T> query})
-    : key = query.key,
-      storageMode = query.storageMode,
-      binding = query.binding,
-      _snapshot = KacheSnapshot<T>.idle(
-        persistence: query.storageMode == KacheStorageMode.persisted
-            ? const KachePersistenceState.idle()
-            : null,
-      ),
-      _didReadPersistence = query.storageMode != KacheStorageMode.persisted {
+      : key = query.key,
+        storageMode = query.storageMode,
+        binding = query.binding,
+        _snapshot = KacheSnapshot<T>.idle(
+          persistence: query.storageMode == KacheStorageMode.persisted
+              ? const KachePersistenceState.idle()
+              : null,
+        ),
+        _didReadPersistence = query.storageMode != KacheStorageMode.persisted {
     _writes = _KacheWriteQueue(onSettled: _operationSettled);
   }
 
@@ -159,8 +159,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     if (query.policy.isCacheOnly || mode == KacheRevalidation.never) {
       return _snapshot;
     }
-    final shouldFetch =
-        !_snapshot.hasData ||
+    final shouldFetch = !_snapshot.hasData ||
         mode == KacheRevalidation.always ||
         classification.freshness == KacheFreshness.stale;
     return shouldFetch ? refresh(query) : _snapshot;
@@ -203,8 +202,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
       return _snapshot;
     }
 
-    final shouldFetch =
-        !hasData ||
+    final shouldFetch = !hasData ||
         switch (query.policy.refreshOnLoad) {
           KacheRevalidation.never => false,
           KacheRevalidation.ifStale =>

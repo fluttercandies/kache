@@ -176,14 +176,14 @@ void main() {
 }
 
 KacheQuery<int> _pollingQuery(String key) => KacheQuery<int>.memory(
-  key: KacheKey(key),
-  policy: KachePolicy.cacheFirst(
-    freshFor: const Duration(hours: 1),
-    refreshOnResume: KacheRevalidation.never,
-    refreshInterval: const Duration(minutes: 5),
-  ),
-  fetch: (_) async => 1,
-);
+      key: KacheKey(key),
+      policy: KachePolicy.cacheFirst(
+        freshFor: const Duration(hours: 1),
+        refreshOnResume: KacheRevalidation.never,
+        refreshInterval: const Duration(minutes: 5),
+      ),
+      fetch: (_) async => 1,
+    );
 
 final class _ManualScheduler {
   final List<_ManualTask> _tasks = <_ManualTask>[];

@@ -181,13 +181,13 @@ void main() {
 }
 
 HiveCeBinding<String> _stringBinding(HiveCeKacheStore store) => store.bind(
-  codecId: 'utf8-string',
-  schema: 1,
-  codec: HiveCeCodec<String>(
-    encode: (value) => Uint8List.fromList(utf8.encode(value)),
-    decode: (bytes) => utf8.decode(bytes),
-  ),
-);
+      codecId: 'utf8-string',
+      schema: 1,
+      codec: HiveCeCodec<String>(
+        encode: (value) => Uint8List.fromList(utf8.encode(value)),
+        decode: (bytes) => utf8.decode(bytes),
+      ),
+    );
 
 String _boxName(String label) =>
     'kache_${label}_${DateTime.now().microsecondsSinceEpoch}';

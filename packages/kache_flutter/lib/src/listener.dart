@@ -4,16 +4,15 @@ import 'package:kache/kache.dart';
 import 'controller.dart';
 
 /// Receives a cache snapshot transition for side effects.
-typedef KacheSnapshotListener<T> =
-    void Function(
-      BuildContext context,
-      KacheSnapshot<T> previous,
-      KacheSnapshot<T> current,
-    );
+typedef KacheSnapshotListener<T> = void Function(
+  BuildContext context,
+  KacheSnapshot<T> previous,
+  KacheSnapshot<T> current,
+);
 
 /// Selects which cache transitions should invoke a listener.
-typedef KacheListenWhen<T> =
-    bool Function(KacheSnapshot<T> previous, KacheSnapshot<T> current);
+typedef KacheListenWhen<T> = bool Function(
+    KacheSnapshot<T> previous, KacheSnapshot<T> current);
 
 /// Observes controller transitions without rebuilding [child].
 class KacheListener<T> extends StatefulWidget {

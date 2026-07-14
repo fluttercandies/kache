@@ -8,10 +8,11 @@ void main() {
     final client = KacheClient();
     final family = kacheProvider.family<String, int>(
       client: (ref) => client,
-      query: (ref, userId) => KacheQuery.memory(
-        key: KacheKey('users', <Object?>[userId]),
-        fetch: (context) async => 'user-$userId',
-      ),
+      query:
+          (ref, userId) => KacheQuery.memory(
+            key: KacheKey('users', <Object?>[userId]),
+            fetch: (context) async => 'user-$userId',
+          ),
     );
     final container = ProviderContainer();
     final first = container.listen(

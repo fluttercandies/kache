@@ -17,37 +17,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  minimum:
-    name: Flutter 3.35 compatibility
+  minimum_packages:
+    name: ${{ matrix.profile }} compatibility
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flutter: "3.24.5"
+            profile: flutter-3.24
+          - flutter: "3.29.3"
+            profile: dart-3.7
     env:
       CI: true
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Set up Flutter 3.35
+      - name: Set up Flutter ${{ matrix.flutter }}
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
-          flutter-version: 3.35.0
+          flutter-version: ${{ matrix.flutter }}
           cache: true
 
-      - name: Install Melos
-        run: dart pub global activate melos 7.8.0
-
-      - name: Bootstrap minimum toolchain
-        run: melos bootstrap
-
-      - name: Verify minimum SDK compatibility
-        run: |
-          dart analyze
-          melos run test
-          melos run test:integration
-          melos run test:connectivity
-          melos run analyze:examples
-          melos run build:web
-          melos run api-check
+      - name: Verify package minimum
+        run: bash tool/verify_minimum_sdk.sh ${{ matrix.profile }}
 
   quality:
     name: Quality and publication readiness
@@ -66,7 +61,7 @@ jobs:
           cache: true
 
       - name: Install Melos
-        run: dart pub global activate melos 7.8.0
+        run: dart pub global activate melos 8.2.2
 
       - name: Bootstrap workspace
         run: melos bootstrap
@@ -109,6 +104,7 @@ jobs:
         run: |
           melos run analyze:examples
           melos run build:web
+          melos run build:android
           melos run docs
           melos run test:readme
           melos run api-check

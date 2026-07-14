@@ -45,15 +45,16 @@ final class KacheQuery<T> {
     KachePolicy? policy,
     String? debugName,
     Map<String, Object?> metadata = const <String, Object?>{},
-  }) => KacheQuery<T>._create(
-    key: key,
-    fetch: fetch,
-    binding: null,
-    storageMode: KacheStorageMode.memory,
-    policy: policy ?? KachePolicy.staleWhileRevalidate(),
-    debugName: debugName,
-    metadata: metadata,
-  );
+  }) =>
+      KacheQuery<T>._create(
+        key: key,
+        fetch: fetch,
+        binding: null,
+        storageMode: KacheStorageMode.memory,
+        policy: policy ?? KachePolicy.staleWhileRevalidate(),
+        debugName: debugName,
+        metadata: metadata,
+      );
 
   /// Creates a query backed by an opaque persistence [binding].
   factory KacheQuery.persisted({
@@ -63,15 +64,16 @@ final class KacheQuery<T> {
     KachePolicy? policy,
     String? debugName,
     Map<String, Object?> metadata = const <String, Object?>{},
-  }) => KacheQuery<T>._create(
-    key: key,
-    fetch: fetch,
-    binding: binding,
-    storageMode: KacheStorageMode.persisted,
-    policy: policy ?? KachePolicy.staleWhileRevalidate(),
-    debugName: debugName,
-    metadata: metadata,
-  );
+  }) =>
+      KacheQuery<T>._create(
+        key: key,
+        fetch: fetch,
+        binding: binding,
+        storageMode: KacheStorageMode.persisted,
+        policy: policy ?? KachePolicy.staleWhileRevalidate(),
+        debugName: debugName,
+        metadata: metadata,
+      );
 
   /// Creates a query that always fetches and never reads or writes cache data.
   ///
@@ -82,15 +84,17 @@ final class KacheQuery<T> {
     Duration? refreshInterval,
     String? debugName,
     Map<String, Object?> metadata = const <String, Object?>{},
-  }) => KacheQuery<T>._create(
-    key: key,
-    fetch: fetch,
-    binding: null,
-    storageMode: KacheStorageMode.none,
-    policy: KachePolicy.staleWhileRevalidate(refreshInterval: refreshInterval),
-    debugName: debugName,
-    metadata: metadata,
-  );
+  }) =>
+      KacheQuery<T>._create(
+        key: key,
+        fetch: fetch,
+        binding: null,
+        storageMode: KacheStorageMode.none,
+        policy:
+            KachePolicy.staleWhileRevalidate(refreshInterval: refreshInterval),
+        debugName: debugName,
+        metadata: metadata,
+      );
 
   factory KacheQuery._create({
     required KacheKey key,

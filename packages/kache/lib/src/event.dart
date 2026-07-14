@@ -85,7 +85,8 @@ final class KacheEvent {
     final isLookup = switch (kind) {
       KacheEventKind.cacheHit ||
       KacheEventKind.cacheMiss ||
-      KacheEventKind.cacheExpired => true,
+      KacheEventKind.cacheExpired =>
+        true,
       _ => false,
     };
     if (isLookup != (layer != null)) {
@@ -123,12 +124,11 @@ final class KacheEvent {
   KacheFailureScope get scope => key != null
       ? KacheFailureScope.key
       : namespace != null
-      ? KacheFailureScope.namespace
-      : KacheFailureScope.global;
+          ? KacheFailureScope.namespace
+          : KacheFailureScope.global;
 
   @override
-  String toString() =>
-      'KacheEvent(kind: ${kind.name}, scope: ${scope.name}, '
+  String toString() => 'KacheEvent(kind: ${kind.name}, scope: ${scope.name}, '
       'layer: ${layer?.name}, hasFailure: ${failure != null})';
 }
 

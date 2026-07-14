@@ -35,9 +35,9 @@ final class KacheClient {
     KacheClock clock = systemKacheClock,
     KacheScheduler scheduler = systemKacheScheduler,
     KacheObserver? observer,
-  }) : _clock = clock,
-       _scheduler = scheduler,
-       _observer = observer {
+  })  : _clock = clock,
+        _scheduler = scheduler,
+        _observer = observer {
     if (persistence == null &&
         persistenceOwnership == KachePersistenceOwnership.owned) {
       throw const KacheConfigurationException(
@@ -315,12 +315,12 @@ final class KacheClient {
   }
 
   void _reportFailure(KacheFailure failure, {String? debugName}) => _emitEvent(
-    kind: KacheEventKind.failure,
-    key: failure.key,
-    namespace: failure.namespace,
-    debugName: debugName,
-    failure: failure,
-  );
+        kind: KacheEventKind.failure,
+        key: failure.key,
+        namespace: failure.namespace,
+        debugName: debugName,
+        failure: failure,
+      );
 
   void _ensureOpen() {
     if (_isClosed) {
@@ -478,9 +478,8 @@ final class KacheClient {
     required KacheNamespace? namespace,
   }) {
     final cause = error is KachePersistenceException ? error.cause : error;
-    final originalStack = error is KachePersistenceException
-        ? error.stackTrace
-        : stackTrace;
+    final originalStack =
+        error is KachePersistenceException ? error.stackTrace : stackTrace;
     final stage = error is KachePersistenceException
         ? error.stage
         : KachePersistenceStage.backend;

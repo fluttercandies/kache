@@ -10,18 +10,19 @@ abstract interface class KacheScheduledTask {
 }
 
 /// Schedules [callback] after [delay].
-typedef KacheScheduler =
-    KacheScheduledTask Function(Duration delay, void Function() callback);
+typedef KacheScheduler = KacheScheduledTask Function(
+    Duration delay, void Function() callback);
 
 /// Schedules cache lifecycle work using a Dart [Timer].
 KacheScheduledTask systemKacheScheduler(
   Duration delay,
   void Function() callback,
-) => _TimerScheduledTask(delay, callback);
+) =>
+    _TimerScheduledTask(delay, callback);
 
 final class _TimerScheduledTask implements KacheScheduledTask {
   _TimerScheduledTask(Duration delay, void Function() callback)
-    : _timer = Timer(delay, callback);
+      : _timer = Timer(delay, callback);
 
   final Timer _timer;
   bool _isCancelled = false;

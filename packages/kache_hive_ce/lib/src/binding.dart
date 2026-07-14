@@ -9,8 +9,8 @@ final class HiveCeBinding<T> extends KachePersistenceBinding<T> {
     required this.codec,
     required this.migrate,
     required bool hasTypeConflict,
-  }) : _hasTypeConflict = hasTypeConflict,
-       super(fingerprint: _bindingFingerprint(codecId, schema));
+  })  : _hasTypeConflict = hasTypeConflict,
+        super(fingerprint: _bindingFingerprint(codecId, schema));
 
   /// Stable identifier written into every physical record.
   final String codecId;

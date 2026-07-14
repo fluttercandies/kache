@@ -1,3 +1,7 @@
+## 1.0.1
+
+- Lowered the verified Dart SDK requirement from 3.9 to 3.5.
+
 ## 1.0.0
 
 - Initial release of versioned Hive CE persistence for Kache.

@@ -58,40 +58,36 @@ void main() {
       'channel': 'stable',
       'cache': true,
     });
-    final minimumFlutter = _jobSteps(
-      workflow,
-      'minimum',
-    ).singleWhere((step) => step['uses'] == _flutterAction);
-    expect(minimumFlutter['with'], <String, Object?>{
-      'flutter-version': '3.35.0',
-      'cache': true,
-    });
-    expect(_commands(steps), contains('dart pub global activate melos 7.8.0'));
+    expect(_commands(steps), contains('dart pub global activate melos 8.2.2'));
   });
 
-  test('CI verifies the declared minimum Flutter version', () {
+  test('CI verifies every independently declared package minimum', () {
     final workflow = _workflow();
-    final job = _job(workflow, 'minimum');
+    final job = _job(workflow, 'minimum_packages');
     expect(job['runs-on'], 'ubuntu-latest');
     expect(job['timeout-minutes'], 30);
 
-    final commands = _commands(_jobSteps(workflow, 'minimum')).join('\n');
-    for (final command in const <String>[
-      'melos bootstrap',
-      'dart analyze',
-      'melos run test',
-      'melos run test:integration',
-      'melos run test:connectivity',
-      'melos run analyze:examples',
-      'melos run build:web',
-      'melos run api-check',
-    ]) {
-      expect(
-        commands,
-        contains(command),
-        reason: 'Missing Flutter 3.35 gate: $command',
-      );
-    }
+    final matrix = ((job['strategy'] as YamlMap)['matrix'] as YamlMap);
+    expect(
+      (matrix['include'] as YamlList).cast<YamlMap>(),
+      containsAll(<YamlMap>[
+        YamlMap.wrap(<String, Object?>{
+          'flutter': '3.24.5',
+          'profile': 'flutter-3.24',
+        }),
+        YamlMap.wrap(<String, Object?>{
+          'flutter': '3.29.3',
+          'profile': 'dart-3.7',
+        }),
+      ]),
+    );
+
+    final commands = _commands(_jobSteps(workflow, 'minimum_packages'));
+    expect(
+      commands,
+      contains(r'bash tool/verify_minimum_sdk.sh ${{ matrix.profile }}'),
+    );
+    expect(File('tool/verify_minimum_sdk.sh').existsSync(), isTrue);
   });
 
   test('CI runs every release gate and cross-platform key contract', () {
@@ -120,6 +116,7 @@ void main() {
       'melos run test:lifecycle',
       'melos run analyze:examples',
       'melos run build:web',
+      'melos run build:android',
       'melos run docs',
       'melos run test:readme',
       'melos run api-check',

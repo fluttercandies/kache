@@ -14,8 +14,7 @@ final class KacheConsumer<T> extends SingleChildStatelessWidget {
     KacheSnapshot<T> snapshot,
     KacheController<T> controller,
     Widget? child,
-  )
-  builder;
+  ) builder;
 
   @override
   Widget buildWithChild(BuildContext context, Widget? child) {

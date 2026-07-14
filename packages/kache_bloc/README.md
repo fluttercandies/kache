@@ -99,12 +99,9 @@ polling and resume revalidation are required.
 
 | Component | Supported range |
 | --- | --- |
-| Dart | Dart >=3.9.0 <4.0.0 |
-| Flutter | Flutter >=3.35.0 |
-| Hive CE | `>=2.19.3 <3.0.0` |
-| Riverpod | `>=3.3.2 <4.0.0` |
+| Dart | Dart >=3.5.0 <4.0.0 |
+| Flutter | Not required |
 | Bloc | `>=9.2.1 <10.0.0` |
-| Provider | `>=6.1.5+1 <7.0.0` |
 
 ## License
 

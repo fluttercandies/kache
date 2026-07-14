@@ -5,12 +5,11 @@ import 'controller.dart';
 import 'scope.dart';
 
 /// Builds Flutter UI from a cache snapshot and its controller.
-typedef KacheWidgetBuilder<T> =
-    Widget Function(
-      BuildContext context,
-      KacheSnapshot<T> snapshot,
-      KacheController<T> controller,
-    );
+typedef KacheWidgetBuilder<T> = Widget Function(
+  BuildContext context,
+  KacheSnapshot<T> snapshot,
+  KacheController<T> controller,
+);
 
 /// Owns a [KacheController] for a query and rebuilds on snapshot changes.
 class KacheBuilder<T> extends StatefulWidget {

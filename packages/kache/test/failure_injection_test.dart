@@ -125,7 +125,8 @@ final class _ClearFailingPersistence implements KachePersistenceBackend {
   Future<KachePersistenceRead<T>?> read<T>({
     required KacheKey key,
     required KachePersistenceBinding<T> binding,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future<void> write<T>({

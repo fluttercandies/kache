@@ -54,32 +54,32 @@ enum KachePersistencePhase {
 final class KachePersistenceState {
   /// Creates an idle persistence state.
   const KachePersistenceState.idle()
-    : phase = KachePersistencePhase.idle,
-      failure = null;
+      : phase = KachePersistencePhase.idle,
+        failure = null;
 
   /// Creates a reading persistence state.
   const KachePersistenceState.reading()
-    : phase = KachePersistencePhase.reading,
-      failure = null;
+      : phase = KachePersistencePhase.reading,
+        failure = null;
 
   /// Creates an absent persistence state.
   const KachePersistenceState.absent()
-    : phase = KachePersistencePhase.absent,
-      failure = null;
+      : phase = KachePersistencePhase.absent,
+        failure = null;
 
   /// Creates a writing persistence state.
   const KachePersistenceState.writing()
-    : phase = KachePersistencePhase.writing,
-      failure = null;
+      : phase = KachePersistencePhase.writing,
+        failure = null;
 
   /// Creates a successfully persisted state.
   const KachePersistenceState.persisted()
-    : phase = KachePersistencePhase.persisted,
-      failure = null;
+      : phase = KachePersistencePhase.persisted,
+        failure = null;
 
   /// Creates a failed persistence state retaining [failure].
   KachePersistenceState.failed(this.failure)
-    : phase = KachePersistencePhase.failed {
+      : phase = KachePersistencePhase.failed {
     if (failure == null) {
       throw ArgumentError.notNull('failure');
     }
@@ -111,21 +111,23 @@ final class KacheSnapshot<T> {
   factory KacheSnapshot.idle({
     int revision = 0,
     KachePersistenceState? persistence,
-  }) => KacheSnapshot<T>._empty(
-    phase: KachePhase.idle,
-    revision: _validateRevision(revision),
-    persistence: persistence,
-  );
+  }) =>
+      KacheSnapshot<T>._empty(
+        phase: KachePhase.idle,
+        revision: _validateRevision(revision),
+        persistence: persistence,
+      );
 
   /// Creates an empty first-load snapshot.
   factory KacheSnapshot.loading({
     int revision = 0,
     KachePersistenceState? persistence,
-  }) => KacheSnapshot<T>._empty(
-    phase: KachePhase.loading,
-    revision: _validateRevision(revision),
-    persistence: persistence,
-  );
+  }) =>
+      KacheSnapshot<T>._empty(
+        phase: KachePhase.loading,
+        revision: _validateRevision(revision),
+        persistence: persistence,
+      );
 
   /// Creates a snapshot containing visible [data].
   factory KacheSnapshot.ready({
@@ -137,36 +139,38 @@ final class KacheSnapshot<T> {
     KacheFailure? failure,
     int revision = 0,
     KachePersistenceState? persistence,
-  }) => KacheSnapshot<T>._(
-    phase: KachePhase.ready,
-    hasData: true,
-    data: data,
-    isRefreshing: isRefreshing,
-    freshness: freshness,
-    source: source,
-    failure: failure,
-    fetchedAt: fetchedAt.toUtc(),
-    revision: _validateRevision(revision),
-    persistence: persistence,
-  );
+  }) =>
+      KacheSnapshot<T>._(
+        phase: KachePhase.ready,
+        hasData: true,
+        data: data,
+        isRefreshing: isRefreshing,
+        freshness: freshness,
+        source: source,
+        failure: failure,
+        fetchedAt: fetchedAt.toUtc(),
+        revision: _validateRevision(revision),
+        persistence: persistence,
+      );
 
   /// Creates a terminal no-data snapshot retaining [failure].
   factory KacheSnapshot.failed({
     required KacheFailure failure,
     int revision = 0,
     KachePersistenceState? persistence,
-  }) => KacheSnapshot<T>._(
-    phase: KachePhase.failure,
-    hasData: false,
-    data: null,
-    isRefreshing: false,
-    freshness: null,
-    source: null,
-    failure: failure,
-    fetchedAt: null,
-    revision: _validateRevision(revision),
-    persistence: persistence,
-  );
+  }) =>
+      KacheSnapshot<T>._(
+        phase: KachePhase.failure,
+        hasData: false,
+        data: null,
+        isRefreshing: false,
+        freshness: null,
+        source: null,
+        failure: failure,
+        fetchedAt: null,
+        revision: _validateRevision(revision),
+        persistence: persistence,
+      );
 
   const KacheSnapshot._({
     required this.phase,
@@ -186,17 +190,17 @@ final class KacheSnapshot<T> {
     required int revision,
     required KachePersistenceState? persistence,
   }) : this._(
-         phase: phase,
-         hasData: false,
-         data: null,
-         isRefreshing: false,
-         freshness: null,
-         source: null,
-         failure: null,
-         fetchedAt: null,
-         revision: revision,
-         persistence: persistence,
-       );
+          phase: phase,
+          hasData: false,
+          data: null,
+          isRefreshing: false,
+          freshness: null,
+          source: null,
+          failure: null,
+          fetchedAt: null,
+          revision: revision,
+          persistence: persistence,
+        );
 
   /// The primary lifecycle phase.
   final KachePhase phase;
@@ -270,8 +274,7 @@ final class KacheSnapshot<T> {
   }
 
   @override
-  String toString() =>
-      'KacheSnapshot<$T>('
+  String toString() => 'KacheSnapshot<$T>('
       'phase: ${phase.name}, hasData: $hasData, '
       'isRefreshing: $isRefreshing, revision: $revision)';
 }

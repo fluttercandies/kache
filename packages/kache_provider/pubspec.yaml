@@ -1,6 +1,6 @@
 name: kache_provider
 description: Provider state management integration for the Kache Flutter library.
-version: 1.0.0
+version: 1.0.1
 homepage: https://github.com/fluttercandies/kache
 repository: https://github.com/fluttercandies/kache/tree/main/packages/kache_provider
 issue_tracker: https://github.com/fluttercandies/kache/issues
@@ -11,15 +11,15 @@ topics:
   - flutter
 
 environment:
-  sdk: ^3.9.0
-  flutter: ">=3.35.0"
+  sdk: ">=3.5.0 <4.0.0"
+  flutter: ">=3.24.0"
 
 resolution: workspace
 
 dependencies:
   flutter:
     sdk: flutter
-  kache_flutter: ^1.0.0
+  kache_flutter: ^1.0.1
   provider: ^6.1.5+1
 
 dev_dependencies:

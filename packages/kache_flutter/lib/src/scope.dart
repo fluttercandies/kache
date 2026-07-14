@@ -13,8 +13,8 @@ enum KacheScopeOwnership {
 }
 
 /// Reports asynchronous scope lifecycle failures.
-typedef KacheScopeErrorHandler =
-    void Function(Object error, StackTrace stackTrace);
+typedef KacheScopeErrorHandler = void Function(
+    Object error, StackTrace stackTrace);
 
 /// Provides a [KacheClient] and bridges Flutter application lifecycle events.
 class KacheScope extends StatefulWidget {
@@ -41,8 +41,8 @@ class KacheScope extends StatefulWidget {
 
   /// Returns the nearest client and subscribes to scope replacement.
   static KacheClient of(BuildContext context) {
-    final scope = context
-        .dependOnInheritedWidgetOfExactType<_KacheInheritedScope>();
+    final scope =
+        context.dependOnInheritedWidgetOfExactType<_KacheInheritedScope>();
     assert(scope != null, 'No KacheScope found in this BuildContext.');
     if (scope == null) {
       throw FlutterError('No KacheScope found in this BuildContext.');

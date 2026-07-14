@@ -105,12 +105,9 @@ owner 调用 `pausePolling()` 和 `resumePolling()` 管理后台计时器。
 
 | 组件 | 支持范围 |
 | --- | --- |
-| Dart | Dart >=3.9.0 <4.0.0 |
-| Flutter | Flutter >=3.35.0 |
-| Hive CE | `>=2.19.3 <3.0.0` |
+| Dart | Dart >=3.7.0 <4.0.0 |
+| Flutter | 不需要 |
 | Riverpod | `>=3.3.2 <4.0.0` |
-| Bloc | `>=9.2.1 <10.0.0` |
-| Provider | `>=6.1.5+1 <7.0.0` |
 
 ## 许可证
 

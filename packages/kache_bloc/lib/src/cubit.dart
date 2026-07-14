@@ -10,7 +10,7 @@ import 'binding.dart';
 class KacheCubit<T> extends Cubit<KacheSnapshot<T>> {
   /// Creates a Cubit and starts loading when the resource stream is attached.
   KacheCubit({required KacheClient client, required KacheQuery<T> query})
-    : this.fromBinding(KacheBlocBinding<T>(client: client, query: query));
+      : this.fromBinding(KacheBlocBinding<T>(client: client, query: query));
 
   /// Creates a Cubit from an unattached binding.
   KacheCubit.fromBinding(this.binding) : super(binding.snapshot) {

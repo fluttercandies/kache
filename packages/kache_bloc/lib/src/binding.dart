@@ -12,7 +12,7 @@ typedef KacheBlocSnapshotListener<T> = void Function(KacheSnapshot<T> snapshot);
 final class KacheBlocBinding<T> {
   /// Creates a detached binding. Call [attach] to start automatic loading.
   KacheBlocBinding({required KacheClient client, required KacheQuery<T> query})
-    : _resource = client.watch(query);
+      : _resource = client.watch(query);
 
   final KacheResource<T> _resource;
   StreamSubscription<KacheSnapshot<T>>? _subscription;
@@ -62,7 +62,8 @@ final class KacheBlocBinding<T> {
   /// Atomically updates data from the latest shared snapshot.
   Future<KacheSnapshot<T>> updateData(
     T Function(KacheSnapshot<T> snapshot) update,
-  ) => _run(() => _resource.updateData(update));
+  ) =>
+      _run(() => _resource.updateData(update));
 
   /// Marks current data stale and optionally starts a fetch.
   Future<KacheSnapshot<T>> invalidate({bool refetch = true}) =>

@@ -191,21 +191,20 @@ final class _FakeConnectivity implements Connectivity {
     List<ConnectivityResult>? initial,
     Future<List<ConnectivityResult>>? initialFuture,
     Object? initialError,
-  }) : _initial =
-           initialFuture ??
-           (initialError == null
-               ? Future<List<ConnectivityResult>>.value(
-                   initial ??
-                       const <ConnectivityResult>[ConnectivityResult.none],
-                 )
-               : Future<List<ConnectivityResult>>.error(initialError));
+  }) : _initial = initialFuture ??
+            (initialError == null
+                ? Future<List<ConnectivityResult>>.value(
+                    initial ??
+                        const <ConnectivityResult>[ConnectivityResult.none],
+                  )
+                : Future<List<ConnectivityResult>>.error(initialError));
 
   final Future<List<ConnectivityResult>> _initial;
   late final StreamController<List<ConnectivityResult>> _changes =
       StreamController<List<ConnectivityResult>>.broadcast(
-        sync: true,
-        onCancel: () => cancelCount += 1,
-      );
+    sync: true,
+    onCancel: () => cancelCount += 1,
+  );
   final Completer<void> _checked = Completer<void>();
   int checkCount = 0;
   int cancelCount = 0;

@@ -24,9 +24,9 @@ final class KacheResource<T> implements _KacheResourceBase {
     required KacheClient client,
     required _KacheEntry<T> entry,
     required KacheQuery<T> query,
-  }) : _client = client,
-       _entry = entry,
-       _query = query {
+  })  : _client = client,
+        _entry = entry,
+        _query = query {
     _entry.addReference(query.policy.gcAfter);
     _entrySubscription = _entry.changes.listen(
       _updates.add,

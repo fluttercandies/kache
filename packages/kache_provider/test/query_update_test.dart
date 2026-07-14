@@ -10,21 +10,21 @@ void main() {
     late KacheController<int> controller;
 
     Widget build(int parameter) => Directionality(
-      textDirection: TextDirection.ltr,
-      child: KacheProvider<int>(
-        client: client,
-        query: KacheQuery.memory(
-          key: KacheKey('provider-parameter', <Object?>[parameter]),
-          fetch: (context) async => parameter,
-        ),
-        child: KacheConsumer<int>(
-          builder: (context, snapshot, value, child) {
-            controller = value;
-            return Text('${snapshot.dataOrNull}');
-          },
-        ),
-      ),
-    );
+          textDirection: TextDirection.ltr,
+          child: KacheProvider<int>(
+            client: client,
+            query: KacheQuery.memory(
+              key: KacheKey('provider-parameter', <Object?>[parameter]),
+              fetch: (context) async => parameter,
+            ),
+            child: KacheConsumer<int>(
+              builder: (context, snapshot, value, child) {
+                controller = value;
+                return Text('${snapshot.dataOrNull}');
+              },
+            ),
+          ),
+        );
 
     await tester.pumpWidget(build(1));
     await tester.pump();
@@ -52,18 +52,18 @@ void main() {
     late KacheController<int> controller;
 
     Widget build(KacheClient client, int value) => KacheProvider<int>(
-      client: client,
-      query: KacheQuery.memory(
-        key: KacheKey('provider-client', <Object?>[value]),
-        policy: KachePolicy.cacheOnly(),
-      ),
-      child: KacheConsumer<int>(
-        builder: (context, snapshot, current, child) {
-          controller = current;
-          return const SizedBox();
-        },
-      ),
-    );
+          client: client,
+          query: KacheQuery.memory(
+            key: KacheKey('provider-client', <Object?>[value]),
+            policy: KachePolicy.cacheOnly(),
+          ),
+          child: KacheConsumer<int>(
+            builder: (context, snapshot, current, child) {
+              controller = current;
+              return const SizedBox();
+            },
+          ),
+        );
 
     await tester.pumpWidget(build(firstClient, 1));
     final firstController = controller;

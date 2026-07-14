@@ -62,18 +62,18 @@ void main() {
     late KacheController<String> controller;
 
     Widget build(KacheQuery<String> query) => Directionality(
-      textDirection: TextDirection.ltr,
-      child: KacheScope(
-        client: client,
-        child: KacheBuilder<String>(
-          query: query,
-          builder: (context, snapshot, value) {
-            controller = value;
-            return Text(snapshot.dataOrNull ?? 'empty');
-          },
-        ),
-      ),
-    );
+          textDirection: TextDirection.ltr,
+          child: KacheScope(
+            client: client,
+            child: KacheBuilder<String>(
+              query: query,
+              builder: (context, snapshot, value) {
+                controller = value;
+                return Text(snapshot.dataOrNull ?? 'empty');
+              },
+            ),
+          ),
+        );
 
     await tester.pumpWidget(
       build(
@@ -118,19 +118,19 @@ void main() {
     final client = KacheClient();
 
     Widget build(String key, String value) => Directionality(
-      textDirection: TextDirection.ltr,
-      child: KacheScope(
-        client: client,
-        child: KacheBuilder<String>(
-          query: KacheQuery<String>.memory(
-            key: KacheKey(key),
-            fetch: (_) async => value,
+          textDirection: TextDirection.ltr,
+          child: KacheScope(
+            client: client,
+            child: KacheBuilder<String>(
+              query: KacheQuery<String>.memory(
+                key: KacheKey(key),
+                fetch: (_) async => value,
+              ),
+              builder: (context, snapshot, controller) =>
+                  Text(snapshot.dataOrNull ?? 'empty'),
+            ),
           ),
-          builder: (context, snapshot, controller) =>
-              Text(snapshot.dataOrNull ?? 'empty'),
-        ),
-      ),
-    );
+        );
 
     await tester.pumpWidget(build('first', 'one'));
     await tester.pump();

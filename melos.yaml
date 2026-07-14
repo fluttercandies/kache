@@ -61,6 +61,9 @@ scripts:
   build:web:
     description: Compile the production example and plugin graph for Web.
     run: melos exec --scope=kache_flutter_example -- "flutter build web --release && flutter pub get"
+  build:android:
+    description: Compile the production example and plugin graph for Android.
+    run: melos exec --scope=kache_flutter_example -- "flutter build appbundle --release && flutter pub get"
   docs:
     description: Generate API documentation for every published package.
     run: melos exec --no-private -- "dart doc --output ../../.dart_tool/docs/\$MELOS_PACKAGE_NAME"
