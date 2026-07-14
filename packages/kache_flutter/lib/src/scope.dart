@@ -65,23 +65,31 @@ class KacheScope extends StatefulWidget {
 
 final class _KacheScopeState extends State<KacheScope>
     with WidgetsBindingObserver {
+  AppLifecycleState? _lifecycleState;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _syncPolling(widget.client);
   }
 
   @override
   void didUpdateWidget(KacheScope oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.client, widget.client) &&
-        oldWidget.ownership == KacheScopeOwnership.owned) {
-      _closeClient(oldWidget.client, oldWidget.onError);
+    if (!identical(oldWidget.client, widget.client)) {
+      _syncPolling(widget.client);
+      if (oldWidget.ownership == KacheScopeOwnership.owned) {
+        _closeClient(oldWidget.client, oldWidget.onError);
+      }
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    _syncPolling(widget.client);
     if (state == AppLifecycleState.resumed && !widget.client.isClosed) {
       _observe(widget.client.revalidateOnResume());
     }
@@ -109,6 +117,17 @@ final class _KacheScopeState extends State<KacheScope>
         },
       ),
     );
+  }
+
+  void _syncPolling(KacheClient client) {
+    if (client.isClosed) {
+      return;
+    }
+    if (_lifecycleState == AppLifecycleState.resumed) {
+      client.resumePolling();
+    } else if (_lifecycleState != null) {
+      client.pausePolling();
+    }
   }
 
   void _closeClient(KacheClient client, KacheScopeErrorHandler? errorHandler) {

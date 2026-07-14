@@ -1,5 +1,9 @@
 # Kache
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 Kache 是面向 Dart 和 Flutter 的类型安全 stale-while-revalidate 缓存库。它能先
@@ -71,6 +75,9 @@ Future<void> showUser({
 `isRefreshing` 为 true 但旧数据仍然可见。启用 `retainDataOnError` 时，刷新失败记录在
 `snapshot.failure`，不会清空数据。
 
+常见 UI 判断可直接使用 `isLoading`、`isReady`、`isFailed`、`isStale` 和
+`hasFailure`，完整快照状态仍然保留。
+
 ## 策略选择
 
 | 需求 | 策略 |
@@ -82,6 +89,10 @@ Future<void> showUser({
 
 `staleAfter` 决定数据何时变旧；`expireAfter` 是硬过期边界，超过后数据会被删除而不是
 发出；`gcAfter` 控制无人引用的内存条目保留时长。
+
+设置 `refreshInterval` 后，只在 resource handle 已 load 且仍活动时轮询；同 key 请求仍会
+自动合并。`pausePolling()` 和 `resumePolling()` 只控制计时器，不会禁用手动缓存命令。
+`KacheQuery.networkOnly` 接受同名周期，但不会因此启用缓存。
 
 ## 持久化
 
@@ -114,15 +125,17 @@ Future<void> showUser({
 `snapshot.throwIfFailed()` 或 `clearResult.throwIfFailed()`。
 
 日志和遥测可以订阅 `KacheClient.events` 或注入 observer。事件默认不包含 payload
-或原始 key 值。
+或原始 key 值。`cacheHit`、`cacheMiss` 和 `cacheExpired` 会标明 `memory` 或
+`persistence` layer，且不会改变资源状态。
 
 ## 生命周期
 
 每次 `client.watch(query)` 都返回独立的 `KacheResource` handle。取消 stream 监听不
 等于释放资源，必须调用 `resource.dispose()`；应用边界再关闭 client 和 owned backend。
 
-Flutter 应用应使用 `KacheScope`，由它选择是否拥有 client，并在应用恢复时自动重验
-活跃资源。状态管理适配器拥有自己的 resource handle，但不会拥有传入的 client。
+Flutter 应用应使用 `KacheScope`，由它选择是否拥有 client，在离开前台时暂停轮询，
+并在恢复前台时自动重验活跃资源。状态管理适配器拥有自己的 resource handle，但不会
+拥有传入的 client。
 
 ## 兼容性
 

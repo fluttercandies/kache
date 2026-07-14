@@ -1,5 +1,9 @@
 # kache_hive_ce
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 Kache 官方的 Hive CE 跨重启持久层。它写入版本化 byte envelope，业务模型无需 Hive
@@ -85,6 +89,9 @@ Future<UserCache> openUserCache(UserApi api, String userId) async {
 未知 envelope、非法 metadata、codec 不匹配、decode 失败和缺少迁移都会以
 `KachePersistenceException` 上报，并带准确 operation/stage。核心恢复流程会删除损坏
 记录，然后按 policy 当作 cache miss 继续。
+
+核心 lookup 事件会报告 persistence `cacheHit`、`cacheMiss` 和 `cacheExpired`，
+不会暴露编码值或 key。
 
 ## 加密
 

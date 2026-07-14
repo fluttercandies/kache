@@ -39,6 +39,12 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
       debugName: query.debugName,
     );
     if (read == null) {
+      client._emitEvent(
+        kind: KacheEventKind.cacheMiss,
+        key: key,
+        debugName: query.debugName,
+        layer: KacheCacheLayer.persistence,
+      );
       _setPersistence(const KachePersistenceState.absent());
       return;
     }
@@ -50,11 +56,23 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
       isInvalidated: metadata.isInvalidated,
     );
     if (freshness == null) {
+      client._emitEvent(
+        kind: KacheEventKind.cacheExpired,
+        key: key,
+        debugName: query.debugName,
+        layer: KacheCacheLayer.persistence,
+      );
       _emitEmpty(const KachePersistenceState.writing());
       await _deletePersisted(version);
       return;
     }
 
+    client._emitEvent(
+      kind: KacheEventKind.cacheHit,
+      key: key,
+      debugName: query.debugName,
+      layer: KacheCacheLayer.persistence,
+    );
     _isInvalidated = metadata.isInvalidated;
     _emitReady(
       data: read.entry.data,

@@ -39,11 +39,22 @@ void verifyKacheTypes({
   required KacheCommandException commandError,
   required KacheEvent event,
   required KacheEventKind eventKind,
+  required KacheCacheLayer cacheLayer,
   required KacheCancellationToken cancellation,
   required KacheCancellationController cancellationController,
   required KacheCancelledException cancellationError,
   required KacheScheduledTask scheduledTask,
-}) {}
+}) {
+  client.pausePolling();
+  client.resumePolling();
+  policy.refreshInterval;
+  snapshot.isLoading;
+  snapshot.isReady;
+  snapshot.isFailed;
+  snapshot.isStale;
+  snapshot.hasFailure;
+  event.layer;
+}
 
 KacheClock verifyClock(KacheClock clock) => clock;
 

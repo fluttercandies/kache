@@ -59,11 +59,12 @@ void main() {
       final query = KacheQuery<int>.networkOnly(
         key: KacheKey('counter'),
         fetch: (_) async => 1,
+        refreshInterval: const Duration(minutes: 1),
       );
 
       expect(query.storageMode, KacheStorageMode.none);
       expect(query.binding, isNull);
-      expect(query.policy, KachePolicy.staleWhileRevalidate());
+      expect(query.policy.refreshInterval, const Duration(minutes: 1));
       expect(query.policy.refreshOnLoad, KacheRevalidation.always);
     });
   });

@@ -19,6 +19,7 @@ void main() {
       policy: KachePolicy.cacheFirst(
         freshFor: const Duration(minutes: 5),
         expireAfter: const Duration(hours: 1),
+        refreshInterval: const Duration(hours: 1),
       ),
       fetch: (_) async => 1,
       debugName: 'counter',
@@ -36,6 +37,8 @@ void main() {
     await resource.updateData((snapshot) => snapshot.requireData + 1);
     await resource.invalidate(refetch: false);
     await resource.remove();
+    client.pausePolling();
+    client.resumePolling();
 
     final namespaceClear = await client.clearNamespace(
       KacheNamespace('counter'),

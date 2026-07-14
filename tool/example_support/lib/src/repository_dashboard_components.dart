@@ -367,7 +367,6 @@ String _sourceLabel(KacheDataSource? source) => switch (source) {
   KacheDataSource.persistence => 'Disk cache',
   KacheDataSource.fetch => 'GitHub',
   KacheDataSource.manual => 'Manual update',
-  KacheDataSource.memory => 'Memory cache',
   null => 'None',
 };
 

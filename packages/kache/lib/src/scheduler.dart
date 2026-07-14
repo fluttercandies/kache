@@ -13,7 +13,7 @@ abstract interface class KacheScheduledTask {
 typedef KacheScheduler =
     KacheScheduledTask Function(Duration delay, void Function() callback);
 
-/// Schedules cache GC using a Dart [Timer].
+/// Schedules cache lifecycle work using a Dart [Timer].
 KacheScheduledTask systemKacheScheduler(
   Duration delay,
   void Function() callback,

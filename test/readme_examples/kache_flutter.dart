@@ -28,7 +28,7 @@ Widget createUserApp({required UserApi api, required String userId}) {
           query: query,
           builder: (context, snapshot, controller) {
             if (!snapshot.hasData) {
-              if (snapshot.phase == KachePhase.failure) {
+              if (snapshot.isFailed) {
                 return const Center(child: Text('Could not load user'));
               }
               return const Center(child: CircularProgressIndicator());

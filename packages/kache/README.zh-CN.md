@@ -1,5 +1,9 @@
 # kache
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 Kache 的无第三方依赖 Dart 核心包。它提供类型安全 key、查询策略、SWR 快照、确定性
@@ -58,6 +62,8 @@ Future<void> showUser({
 
 第一个 listener 会立即收到当前快照。有缓存时，`isRefreshing` 和 `failure` 可以与
 数据同时存在，因此后台操作进行中或失败后都不需要丢弃可用数据。
+常见判断可直接使用 `isLoading`、`isReady`、`isFailed`、`isStale` 和
+`hasFailure`。
 
 ## 查询与 key
 
@@ -76,6 +82,10 @@ binding。
 - `networkOnly`：状态只存在于活动 handle 中，并且始终请求。
 
 硬过期数据会被删除且不会发出。默认情况下，刷新失败保留可见数据。
+
+设置 `refreshInterval` 后会在首次 load 完成且 handle 仍活动时轮询；同 key handle
+仍只共享一次 fetch。client owner 可调用 `pausePolling()` 和 `resumePolling()`，且不会
+影响手动命令。`KacheQuery.networkOnly` 接受同名周期，但不会启用存储。
 
 ## 命令
 
@@ -100,7 +110,9 @@ binding。
 预期失败通过快照和命令结果中的 `KacheFailure` 表达。原始异常和堆栈会保留，字符串
 输出会脱敏；配置和生命周期误用会立即抛出。
 
-可订阅 `KacheClient.events` 做遥测。observer 自身失败不会中断缓存状态机。
+可订阅 `KacheClient.events` 做遥测。observer 自身失败不会中断缓存状态机。lookup
+事件通过 `cacheHit`、`cacheMiss` 或 `cacheExpired` 标明 `memory` 或
+`persistence` layer，且不携带 payload。
 
 ## 所有权
 

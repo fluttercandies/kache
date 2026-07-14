@@ -48,6 +48,29 @@ void main() {
       expect(chinese, contains('Dart >=3.9.0 <4.0.0'));
     }
   });
+
+  test('test dependency range follows compatible Flutter SDK pins', () {
+    for (final path in const <String>[
+      '.',
+      'packages/kache',
+      'packages/kache_hive_ce',
+      'packages/kache_riverpod',
+      'packages/kache_bloc',
+      'tool/contract_tests',
+    ]) {
+      final pubspec = _pubspec(path);
+      final dependencies = pubspec['dependencies'] as YamlMap?;
+      final devDependencies = pubspec['dev_dependencies'] as YamlMap?;
+      final constraint = VersionConstraint.parse(
+        (devDependencies?['test'] ?? dependencies?['test']) as String,
+      );
+
+      expect(constraint.allows(Version(1, 26, 2)), isTrue, reason: path);
+      expect(constraint.allows(Version(1, 30, 0)), isTrue, reason: path);
+      expect(constraint.allows(Version(1, 31, 0)), isTrue, reason: path);
+      expect(constraint.allows(Version(1, 32, 0)), isFalse, reason: path);
+    }
+  });
 }
 
 YamlMap _pubspec(String path) =>

@@ -1,5 +1,9 @@
 # kache_riverpod
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 基于 Kache 核心状态机的 Riverpod provider 与 notifier。状态始终是完整
@@ -88,10 +92,14 @@ keep-alive link，不改变核心 cache GC 语义。
 provider dispose 会取消快照订阅并释放 resource；延迟完成的 fetch 不会向已销毁
 notifier emit。
 
+provider 持有活动 resource 时，`refreshInterval` 会按周期刷新。纯 Dart 宿主由 client
+owner 调用 `pausePolling()` 和 `resumePolling()` 管理后台计时器。
+
 ## Flutter
 
 应用根节点使用 `ProviderScope`。`Consumer` watch Kache provider，并读取 notifier
-执行命令。应用还需要自动 resume 重验时，配合 `kache_flutter` 的 `KacheScope`。
+执行命令。应用还需要生命周期感知的轮询与 resume 重验时，配合 `kache_flutter` 的
+`KacheScope`。
 
 ## 兼容性
 

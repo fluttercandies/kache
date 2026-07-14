@@ -10,9 +10,18 @@ void main() {
       expect(policy.expireAfter, isNull);
       expect(policy.refreshOnLoad, KacheRevalidation.always);
       expect(policy.refreshOnResume, KacheRevalidation.always);
+      expect(policy.refreshInterval, isNull);
       expect(policy.retainDataOnError, isTrue);
       expect(policy.gcAfter, const Duration(minutes: 5));
       expect(policy.isCacheOnly, isFalse);
+    });
+
+    test('accepts an explicit refresh interval', () {
+      final policy = KachePolicy.staleWhileRevalidate(
+        refreshInterval: const Duration(minutes: 5),
+      );
+
+      expect(policy.refreshInterval, const Duration(minutes: 5));
     });
   });
 
@@ -137,6 +146,20 @@ void main() {
         () => KachePolicy.cacheFirst(
           freshFor: const Duration(minutes: 10),
           expireAfter: const Duration(minutes: 9),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects non-positive refresh intervals', () {
+      expect(
+        () => KachePolicy.staleWhileRevalidate(refreshInterval: Duration.zero),
+        throwsArgumentError,
+      );
+      expect(
+        () => KachePolicy.cacheFirst(
+          freshFor: Duration.zero,
+          refreshInterval: const Duration(microseconds: -1),
         ),
         throwsArgumentError,
       );

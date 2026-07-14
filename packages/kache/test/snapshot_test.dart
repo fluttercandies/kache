@@ -111,6 +111,42 @@ void main() {
     });
   });
 
+  group('KacheSnapshot convenience state', () {
+    test('derives phase and freshness flags', () {
+      final idle = KacheSnapshot<String>.idle();
+      final loading = KacheSnapshot<String>.loading();
+      final ready = KacheSnapshot<String>.ready(
+        data: 'cached',
+        freshness: KacheFreshness.stale,
+        source: KacheDataSource.persistence,
+        fetchedAt: fetchedAt,
+      );
+      final failed = KacheSnapshot<String>.failed(failure: _fetchFailure(key));
+
+      expect(idle.isLoading, isFalse);
+      expect(loading.isLoading, isTrue);
+      expect(ready.isReady, isTrue);
+      expect(ready.isStale, isTrue);
+      expect(failed.isFailed, isTrue);
+      expect(failed.hasFailure, isTrue);
+    });
+
+    test('hasFailure includes orthogonal persistence failures', () {
+      final snapshot = KacheSnapshot<String>.ready(
+        data: 'fresh',
+        freshness: KacheFreshness.fresh,
+        source: KacheDataSource.fetch,
+        fetchedAt: fetchedAt,
+        persistence: KachePersistenceState.failed(_persistenceFailure(key)),
+      );
+
+      expect(snapshot.isReady, isTrue);
+      expect(snapshot.isStale, isFalse);
+      expect(snapshot.isFailed, isFalse);
+      expect(snapshot.hasFailure, isTrue);
+    });
+  });
+
   group('KachePersistenceState', () {
     test('failed retains the exact persistence failure', () {
       final failure = _persistenceFailure(key);

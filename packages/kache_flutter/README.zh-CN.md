@@ -1,5 +1,9 @@
 # kache_flutter
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 Kache 的 Flutter 组件与生命周期接入，不依赖第三方状态管理库。此包会 re-export
@@ -44,7 +48,7 @@ Widget createUserApp({required UserApi api, required String userId}) {
           query: query,
           builder: (context, snapshot, controller) {
             if (!snapshot.hasData) {
-              if (snapshot.phase == KachePhase.failure) {
+              if (snapshot.isFailed) {
                 return const Center(child: Text('Could not load user'));
               }
               return const Center(child: CircularProgressIndicator());
@@ -72,7 +76,8 @@ Widget createUserApp({required UserApi api, required String userId}) {
 
 ## 组件
 
-- `KacheScope` 提供 client，并把 `AppLifecycleState.resumed` 桥接到策略驱动重验。
+- `KacheScope` 提供 client，在离开前台时暂停轮询，并把
+  `AppLifecycleState.resumed` 桥接到策略驱动重验。
 - `KacheBuilder<T>` 拥有一个 `KacheController<T>`，根据完整快照重建。
 - `KacheListener<T>` 执行副作用，不重建 child。
 - `KacheController<T>` 实现 `ValueListenable<KacheSnapshot<T>>`，并暴露所有资源命令。
@@ -88,6 +93,10 @@ Widget 收到相同 key 的新 query 时，controller 只更新 handle 的 fetch
 
 生命周期失败可以通过 `KacheScope.onError` 处理；未提供 handler 时会交给
 `FlutterError.reportError`。
+
+在 query policy 设置 `refreshInterval` 即可轮询活动资源。scope 会在 inactive、
+hidden、paused 和 detached 状态暂停计时器，恢复时重新计算完整周期，再执行
+`refreshOnResume`。
 
 ## 持久化
 

@@ -1,5 +1,9 @@
 # kache_bloc
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 Kache 的纯 Dart Bloc/Cubit 接入。它把完整 `KacheSnapshot<T>` 作为 state，并且不依赖
@@ -63,6 +67,9 @@ Future<void> observeUser(UserApi api, String userId) async {
 `refresh`、`setData`、`updateData`、`invalidate` 和 `remove`。关闭 Cubit 会取消
 订阅并释放 resource，但不会关闭传入的 client。
 
+Cubit 活动时可在 query policy 设置 `refreshInterval`。纯 Dart client owner 可用
+`pausePolling()` 和 `resumePolling()` 暂停与恢复这些计时器。
+
 业务命令适合放在同一个 Cubit 时，可以继承 `KacheCubit<T>`。所有网络参数都必须进入
 query key。
 
@@ -81,7 +88,8 @@ binding 只允许一个受管 listener，确保 resource 所有权明确；attac
 `BlocBuilder<KacheCubit<T>, KacheSnapshot<T>>` 渲染。页面需要在 descendant 首次
 读取前开始缓存加载时，设置 `lazy: false`。
 
-需要 resume 重验时，在应用外层使用 `kache_flutter` 的 `KacheScope`。
+需要生命周期感知的轮询与 resume 重验时，在应用外层使用 `kache_flutter` 的
+`KacheScope`。
 
 ## 兼容性
 

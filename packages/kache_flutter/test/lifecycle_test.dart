@@ -61,4 +61,105 @@ void main() {
     resource.dispose();
     await client.close();
   });
+
+  testWidgets('app lifecycle pauses and resumes polling', (tester) async {
+    final scheduler = _ManualScheduler();
+    final client = KacheClient(scheduler: scheduler.schedule);
+    final resource = client.watch(
+      KacheQuery<int>.memory(
+        key: KacheKey('lifecycle-polling'),
+        policy: KachePolicy.cacheFirst(
+          freshFor: const Duration(hours: 1),
+          refreshOnResume: KacheRevalidation.never,
+          refreshInterval: const Duration(minutes: 5),
+        ),
+        fetch: (_) async => 1,
+      ),
+    );
+    await resource.load();
+    await tester.pumpWidget(
+      KacheScope(client: client, child: const SizedBox()),
+    );
+
+    for (final state in const <AppLifecycleState>[
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.detached,
+    ]) {
+      final task = scheduler.activeTasks.single;
+      tester.binding.handleAppLifecycleStateChanged(state);
+      expect(task.isCancelled, isTrue, reason: state.name);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(scheduler.activeTasks, hasLength(1), reason: state.name);
+    }
+
+    resource.dispose();
+    await client.close();
+  });
+
+  testWidgets('replacement client inherits the current inactive state', (
+    tester,
+  ) async {
+    final firstScheduler = _ManualScheduler();
+    final secondScheduler = _ManualScheduler();
+    final first = KacheClient(scheduler: firstScheduler.schedule);
+    final second = KacheClient(scheduler: secondScheduler.schedule);
+    final firstResource = first.watch(_pollingQuery('first-client'));
+    final secondResource = second.watch(_pollingQuery('second-client'));
+    await firstResource.load();
+    await secondResource.load();
+    await tester.pumpWidget(KacheScope(client: first, child: const SizedBox()));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    expect(firstScheduler.activeTasks, isEmpty);
+    expect(secondScheduler.activeTasks, hasLength(1));
+
+    await tester.pumpWidget(
+      KacheScope(client: second, child: const SizedBox()),
+    );
+    expect(secondScheduler.activeTasks, isEmpty);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(secondScheduler.activeTasks, hasLength(1));
+
+    firstResource.dispose();
+    secondResource.dispose();
+    await first.close();
+    await second.close();
+  });
+}
+
+KacheQuery<int> _pollingQuery(String key) => KacheQuery<int>.memory(
+  key: KacheKey(key),
+  policy: KachePolicy.cacheFirst(
+    freshFor: const Duration(hours: 1),
+    refreshOnResume: KacheRevalidation.never,
+    refreshInterval: const Duration(minutes: 5),
+  ),
+  fetch: (_) async => 1,
+);
+
+final class _ManualScheduler {
+  final List<_ManualTask> _tasks = <_ManualTask>[];
+
+  List<_ManualTask> get activeTasks =>
+      _tasks.where((task) => !task.isCancelled).toList(growable: false);
+
+  KacheScheduledTask schedule(Duration delay, void Function() callback) {
+    final task = _ManualTask();
+    _tasks.add(task);
+    return task;
+  }
+}
+
+final class _ManualTask implements KacheScheduledTask {
+  @override
+  bool isCancelled = false;
+
+  @override
+  void cancel() => isCancelled = true;
 }

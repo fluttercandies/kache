@@ -107,6 +107,212 @@ void main() {
     expect(event.toString(), contains('failure'));
   });
 
+  test('cache lookup events require an exact cache layer', () {
+    final hit = KacheEvent(
+      kind: KacheEventKind.cacheHit,
+      occurredAt: now,
+      key: KacheKey('lookup'),
+      layer: KacheCacheLayer.memory,
+    );
+
+    expect(hit.layer, KacheCacheLayer.memory);
+    expect(
+      () => KacheEvent(
+        kind: KacheEventKind.cacheMiss,
+        occurredAt: now,
+        key: KacheKey('lookup'),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => KacheEvent(
+        kind: KacheEventKind.cacheHit,
+        occurredAt: now,
+        layer: KacheCacheLayer.memory,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => KacheEvent(
+        kind: KacheEventKind.fetchStarted,
+        occurredAt: now,
+        key: KacheKey('lookup'),
+        layer: KacheCacheLayer.persistence,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('memory loads report misses and active-entry hits', () async {
+    final events = <KacheEvent>[];
+    final client = KacheClient(clock: () => now, observer: events.add);
+    final query = KacheQuery<String>.memory(
+      key: KacheKey('memory-lookup'),
+      policy: KachePolicy.cacheFirst(freshFor: const Duration(hours: 1)),
+      fetch: (_) async => 'value',
+    );
+    final first = client.watch(query);
+
+    await first.load();
+    final second = client.watch(query);
+    await second.load();
+
+    final lookups = events.where((event) => event.layer != null).toList();
+    expect(
+      lookups.map((event) => (event.kind, event.layer)),
+      <(KacheEventKind, KacheCacheLayer?)>[
+        (KacheEventKind.cacheMiss, KacheCacheLayer.memory),
+        (KacheEventKind.cacheHit, KacheCacheLayer.memory),
+      ],
+    );
+    expect(second.snapshot.source, KacheDataSource.fetch);
+    first.dispose();
+    second.dispose();
+    await client.close();
+  });
+
+  test('persistence loads report hit and miss outcomes', () async {
+    final backend = MemoryKachePersistence();
+    final binding = backend.bind<String>(fingerprint: 'events-v1');
+    final hitKey = KacheKey('persistence-lookup', ['hit']);
+    await backend.write(
+      key: hitKey,
+      binding: binding,
+      entry: KachePersistedEntry(
+        data: 'cached',
+        metadata: KachePersistedMetadata(fetchedAt: now),
+      ),
+    );
+    final events = <KacheEvent>[];
+    final client = KacheClient(
+      persistence: backend,
+      clock: () => now,
+      observer: events.add,
+    );
+    final policy = KachePolicy.cacheFirst(freshFor: const Duration(hours: 1));
+    final hit = client.watch(
+      KacheQuery<String>.persisted(
+        key: hitKey,
+        binding: binding,
+        policy: policy,
+        fetch: (_) async => 'network',
+      ),
+    );
+    final miss = client.watch(
+      KacheQuery<String>.persisted(
+        key: KacheKey('persistence-lookup', ['miss']),
+        binding: binding,
+        policy: policy,
+        fetch: (_) async => 'network',
+      ),
+    );
+
+    expect((await hit.load()).requireData, 'cached');
+    expect((await miss.load()).requireData, 'network');
+
+    final lookups = events.where((event) => event.layer != null).toList();
+    expect(
+      lookups.map((event) => (event.kind, event.layer)),
+      <(KacheEventKind, KacheCacheLayer?)>[
+        (KacheEventKind.cacheHit, KacheCacheLayer.persistence),
+        (KacheEventKind.cacheMiss, KacheCacheLayer.persistence),
+      ],
+    );
+    hit.dispose();
+    miss.dispose();
+    await client.close();
+    await backend.close();
+  });
+
+  test(
+    'hard-expired persistence reports expiry without a miss event',
+    () async {
+      final backend = MemoryKachePersistence();
+      final binding = backend.bind<String>(fingerprint: 'expiry-v1');
+      final key = KacheKey('expired-lookup');
+      await backend.write(
+        key: key,
+        binding: binding,
+        entry: KachePersistedEntry(
+          data: 'expired',
+          metadata: KachePersistedMetadata(
+            fetchedAt: now.subtract(const Duration(minutes: 2)),
+          ),
+        ),
+      );
+      final events = <KacheEvent>[];
+      final client = KacheClient(
+        persistence: backend,
+        clock: () => now,
+        observer: events.add,
+      );
+      final resource = client.watch(
+        KacheQuery<String>.persisted(
+          key: key,
+          binding: binding,
+          policy: KachePolicy.cacheOnly(
+            expireAfter: const Duration(minutes: 1),
+          ),
+        ),
+      );
+
+      expect((await resource.load()).isFailed, isTrue);
+
+      final lookups = events.where((event) => event.layer != null).toList();
+      expect(lookups, hasLength(1));
+      expect(lookups.single.kind, KacheEventKind.cacheExpired);
+      expect(lookups.single.layer, KacheCacheLayer.persistence);
+      resource.dispose();
+      await client.close();
+      await backend.close();
+    },
+  );
+
+  test('hard-expired active data reports a memory expiry', () async {
+    var current = now;
+    final events = <KacheEvent>[];
+    final client = KacheClient(clock: () => current, observer: events.add);
+    final resource = client.watch(
+      KacheQuery<String>.memory(
+        key: KacheKey('expired-memory'),
+        policy: KachePolicy.cacheFirst(
+          freshFor: const Duration(minutes: 1),
+          expireAfter: const Duration(minutes: 1),
+        ),
+        fetch: (_) async => 'value',
+      ),
+    );
+    await resource.load();
+    events.clear();
+    current = current.add(const Duration(minutes: 2));
+
+    await resource.load();
+
+    final lookups = events.where((event) => event.layer != null).toList();
+    expect(lookups, hasLength(1));
+    expect(lookups.single.kind, KacheEventKind.cacheExpired);
+    expect(lookups.single.layer, KacheCacheLayer.memory);
+    resource.dispose();
+    await client.close();
+  });
+
+  test('network-only loads do not emit cache lookup events', () async {
+    final events = <KacheEvent>[];
+    final client = KacheClient(clock: () => now, observer: events.add);
+    final resource = client.watch(
+      KacheQuery<String>.networkOnly(
+        key: KacheKey('network-events'),
+        fetch: (_) async => 'network',
+      ),
+    );
+
+    await resource.load();
+
+    expect(events.where((event) => event.layer != null), isEmpty);
+    resource.dispose();
+    await client.close();
+  });
+
   test('clear events use namespace and global scopes', () async {
     final client = KacheClient(clock: () => now);
     final events = <KacheEvent>[];

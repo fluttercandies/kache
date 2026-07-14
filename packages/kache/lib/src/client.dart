@@ -60,6 +60,7 @@ final class KacheClient {
   int _globalEpoch = 0;
   Future<void> _clearTail = Future<void>.value();
   bool _isClosed = false;
+  bool _isPollingPaused = false;
   Future<void>? _closeFuture;
 
   /// Whether [close] has started.
@@ -112,6 +113,30 @@ final class KacheClient {
     return Future.wait<void>(
       resources.map((resource) => resource.refreshActive()),
     );
+  }
+
+  /// Pauses interval-based refresh without affecting manual commands.
+  void pausePolling() {
+    _ensureOpen();
+    if (_isPollingPaused) {
+      return;
+    }
+    _isPollingPaused = true;
+    for (final resource in _resources.toList(growable: false)) {
+      resource.pausePolling();
+    }
+  }
+
+  /// Resumes interval-based refresh for active resources.
+  void resumePolling() {
+    _ensureOpen();
+    if (!_isPollingPaused) {
+      return;
+    }
+    _isPollingPaused = false;
+    for (final resource in _resources.toList(growable: false)) {
+      resource.resumePolling();
+    }
   }
 
   /// Loads [query] without retaining a public resource handle.
@@ -214,6 +239,7 @@ final class KacheClient {
     KacheNamespace? namespace,
     String? debugName,
     KacheFailure? failure,
+    KacheCacheLayer? layer,
   }) {
     if (_events.isClosed) {
       return;
@@ -225,6 +251,7 @@ final class KacheClient {
       namespace: namespace,
       debugName: debugName,
       failure: failure,
+      layer: layer,
     );
     try {
       _observer?.call(event);

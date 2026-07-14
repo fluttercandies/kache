@@ -74,9 +74,12 @@ final class KacheQuery<T> {
   );
 
   /// Creates a query that always fetches and never reads or writes cache data.
+  ///
+  /// [refreshInterval] enables active polling without enabling storage.
   factory KacheQuery.networkOnly({
     required KacheKey key,
     required KacheFetcher<T> fetch,
+    Duration? refreshInterval,
     String? debugName,
     Map<String, Object?> metadata = const <String, Object?>{},
   }) => KacheQuery<T>._create(
@@ -84,7 +87,7 @@ final class KacheQuery<T> {
     fetch: fetch,
     binding: null,
     storageMode: KacheStorageMode.none,
-    policy: KachePolicy.staleWhileRevalidate(),
+    policy: KachePolicy.staleWhileRevalidate(refreshInterval: refreshInterval),
     debugName: debugName,
     metadata: metadata,
   );

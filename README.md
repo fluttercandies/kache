@@ -1,5 +1,9 @@
 # Kache
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [简体中文](README.zh-CN.md)
 
 Kache is a type-safe stale-while-revalidate cache for Dart and Flutter. It can
@@ -75,6 +79,9 @@ first load once. Cached data stays visible while `isRefreshing` is true. A
 refresh failure is available in `snapshot.failure` without removing data when
 `retainDataOnError` is enabled.
 
+Use `isLoading`, `isReady`, `isFailed`, `isStale`, and `hasFailure` for common
+UI checks without flattening the complete snapshot state.
+
 ## Policy guide
 
 | Requirement | Policy |
@@ -87,6 +94,11 @@ refresh failure is available in `snapshot.failure` without removing data when
 `staleAfter` controls freshness. `expireAfter` is a hard boundary after which
 data is removed instead of emitted. `gcAfter` controls how long an unreferenced
 in-memory entry remains available.
+
+Set `refreshInterval` to poll only while a resource handle is loaded and
+active. Same-key polling remains single-flight. `pausePolling()` and
+`resumePolling()` control timers without disabling manual cache commands.
+`KacheQuery.networkOnly` accepts the same interval without enabling a cache.
 
 ## Persistence
 
@@ -123,6 +135,8 @@ call `snapshot.throwIfFailed()` or `clearResult.throwIfFailed()`.
 
 Subscribe to `KacheClient.events` or provide an observer for logging and
 telemetry. Events never include payloads or raw key values by default.
+`cacheHit`, `cacheMiss`, and `cacheExpired` identify their `memory` or
+`persistence` layer without changing resource state.
 
 ## Lifecycle
 
@@ -132,8 +146,9 @@ Release the handle with `resource.dispose()`, then close clients and owned
 backends at the application boundary.
 
 Flutter applications should use `KacheScope`, which can own the client and
-automatically revalidate active resources when the app resumes. State adapters
-own their resource handles but never own the supplied client.
+pause polling outside the foreground before revalidating active resources when
+the app resumes. State adapters own their resource handles but never own the
+supplied client.
 
 ## Compatibility
 

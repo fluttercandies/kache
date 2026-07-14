@@ -126,7 +126,7 @@ final class _RepositoryDashboardState extends State<RepositoryDashboard> {
         showNetworkImage: widget.showNetworkImage,
       );
     }
-    if (snapshot.phase == KachePhase.failure) {
+    if (snapshot.isFailed) {
       return _EmptyState(
         key: const ValueKey<String>('failure'),
         icon: Icons.cloud_off_rounded,

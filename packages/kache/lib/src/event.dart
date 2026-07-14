@@ -3,6 +3,15 @@ import 'key.dart';
 
 /// Stable kinds emitted by [KacheClient.events].
 enum KacheEventKind {
+  /// A cache lookup found usable data.
+  cacheHit,
+
+  /// A cache lookup found no data.
+  cacheMiss,
+
+  /// A cache lookup found and removed hard-expired data.
+  cacheExpired,
+
   /// A persistence read started.
   persistenceReadStarted,
 
@@ -43,6 +52,15 @@ enum KacheEventKind {
   clientClosed,
 }
 
+/// The cache layer involved in a lookup event.
+enum KacheCacheLayer {
+  /// The active in-process entry registry.
+  memory,
+
+  /// The configured persistence backend.
+  persistence,
+}
+
 /// A non-payload cache lifecycle event.
 final class KacheEvent {
   /// Creates an event for a key, namespace, or global operation.
@@ -53,9 +71,24 @@ final class KacheEvent {
     this.namespace,
     this.debugName,
     this.failure,
+    this.layer,
   }) : occurredAt = occurredAt.toUtc() {
     if (key != null && namespace != null) {
       throw ArgumentError('An event cannot target both key and namespace.');
+    }
+    final isLookup = switch (kind) {
+      KacheEventKind.cacheHit ||
+      KacheEventKind.cacheMiss ||
+      KacheEventKind.cacheExpired => true,
+      _ => false,
+    };
+    if (isLookup != (layer != null)) {
+      throw ArgumentError(
+        'Cache lookup events require a layer and other events forbid it.',
+      );
+    }
+    if (isLookup && key == null) {
+      throw ArgumentError('Cache lookup events require a key.');
     }
   }
 
@@ -77,6 +110,9 @@ final class KacheEvent {
   /// Classified failure for [KacheEventKind.failure].
   final KacheFailure? failure;
 
+  /// Cache layer for lookup events, otherwise `null`.
+  final KacheCacheLayer? layer;
+
   /// The non-sensitive operation scope.
   KacheFailureScope get scope => key != null
       ? KacheFailureScope.key
@@ -87,7 +123,7 @@ final class KacheEvent {
   @override
   String toString() =>
       'KacheEvent(kind: ${kind.name}, scope: ${scope.name}, '
-      'hasFailure: ${failure != null})';
+      'layer: ${layer?.name}, hasFailure: ${failure != null})';
 }
 
 /// Receives cache events synchronously after state is committed.

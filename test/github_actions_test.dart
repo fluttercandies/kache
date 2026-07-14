@@ -29,15 +29,20 @@ void main() {
   });
 
   test('CI pins actions and the supported Flutter and Melos toolchain', () {
-    final steps = _steps(_workflow());
+    final workflow = _workflow();
+    final steps = _allSteps(workflow);
     final actionSteps = steps
         .where((step) => step.containsKey('uses'))
         .toList();
 
-    expect(actionSteps.map((step) => step['uses']), <String>[
-      _checkoutAction,
-      _flutterAction,
-    ]);
+    expect(
+      actionSteps.where((step) => step['uses'] == _checkoutAction),
+      hasLength(2),
+    );
+    expect(
+      actionSteps.where((step) => step['uses'] == _flutterAction),
+      hasLength(2),
+    );
     for (final step in actionSteps) {
       expect(
         step['uses'],
@@ -46,14 +51,45 @@ void main() {
       );
     }
 
-    final flutterStep = actionSteps.singleWhere(
-      (step) => step['uses'] == _flutterAction,
-    );
-    expect(flutterStep['with'], <String, Object?>{
+    final stableFlutter = _steps(
+      workflow,
+    ).singleWhere((step) => step['uses'] == _flutterAction);
+    expect(stableFlutter['with'], <String, Object?>{
       'channel': 'stable',
       'cache': true,
     });
+    final minimumFlutter = _jobSteps(
+      workflow,
+      'minimum',
+    ).singleWhere((step) => step['uses'] == _flutterAction);
+    expect(minimumFlutter['with'], <String, Object?>{
+      'flutter-version': '3.35.0',
+      'cache': true,
+    });
     expect(_commands(steps), contains('dart pub global activate melos 7.8.0'));
+  });
+
+  test('CI verifies the declared minimum Flutter version', () {
+    final workflow = _workflow();
+    final job = _job(workflow, 'minimum');
+    expect(job['runs-on'], 'ubuntu-latest');
+    expect(job['timeout-minutes'], 30);
+
+    final commands = _commands(_jobSteps(workflow, 'minimum')).join('\n');
+    for (final command in const <String>[
+      'melos bootstrap',
+      'dart analyze',
+      'melos run test',
+      'melos run test:integration',
+      'melos run analyze:examples',
+      'melos run api-check',
+    ]) {
+      expect(
+        commands,
+        contains(command),
+        reason: 'Missing Flutter 3.35 gate: $command',
+      );
+    }
   });
 
   test('CI runs every release gate and cross-platform key contract', () {
@@ -110,11 +146,22 @@ List<String> _branches(YamlMap triggers, String name) {
   return ((trigger['branches'] as YamlList).cast<String>()).toList();
 }
 
-YamlMap _qualityJob(YamlMap workflow) =>
-    (workflow['jobs'] as YamlMap)['quality'] as YamlMap;
+YamlMap _qualityJob(YamlMap workflow) => _job(workflow, 'quality');
+
+YamlMap _job(YamlMap workflow, String name) =>
+    (workflow['jobs'] as YamlMap)[name] as YamlMap;
 
 List<YamlMap> _steps(YamlMap workflow) =>
     ((_qualityJob(workflow)['steps'] as YamlList).cast<YamlMap>()).toList();
+
+List<YamlMap> _jobSteps(YamlMap workflow, String name) =>
+    (((_job(workflow, name))['steps'] as YamlList).cast<YamlMap>()).toList();
+
+List<YamlMap> _allSteps(YamlMap workflow) => (workflow['jobs'] as YamlMap)
+    .values
+    .cast<YamlMap>()
+    .expand((job) => (job['steps'] as YamlList).cast<YamlMap>())
+    .toList();
 
 List<String> _commands(List<YamlMap> steps) => steps
     .where((step) => step.containsKey('run'))

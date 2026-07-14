@@ -9,6 +9,10 @@ abstract interface class _KacheResourceBase {
 
   Future<void> refreshActive();
 
+  void pausePolling();
+
+  void resumePolling();
+
   void dispose();
 }
 
@@ -58,6 +62,8 @@ final class KacheResource<T> implements _KacheResourceBase {
   late final Stream<KacheSnapshot<T>> _stream;
   bool _didStartAutomaticLoad = false;
   bool _isDisposed = false;
+  DateTime? _pollAnchor;
+  KacheScheduledTask? _pollTask;
 
   /// The current shared snapshot, available synchronously.
   KacheSnapshot<T> get snapshot => _entry.snapshot;
@@ -75,13 +81,13 @@ final class KacheResource<T> implements _KacheResourceBase {
   Future<KacheSnapshot<T>> load() {
     _ensureActive();
     _didStartAutomaticLoad = true;
-    return _entry.load(query);
+    return _trackPolling(_entry.load(query));
   }
 
   /// Forces a fetch with this handle's fetcher, ignoring freshness.
   Future<KacheSnapshot<T>> refresh() {
     _ensureActive();
-    return _entry.refresh(query);
+    return _trackPolling(_entry.refresh(query));
   }
 
   /// Replaces this handle's same-key fetcher and policy without loading.
@@ -89,6 +95,7 @@ final class KacheResource<T> implements _KacheResourceBase {
     _ensureActive();
     _client._rebind(_entry, query);
     _query = query;
+    _schedulePolling();
   }
 
   /// Replaces current data immediately and persists it when configured.
@@ -124,6 +131,7 @@ final class KacheResource<T> implements _KacheResourceBase {
       return;
     }
     _isDisposed = true;
+    _cancelPolling();
     unawaited(_entrySubscription.cancel());
     _closeUpdates();
     _client._release(this, _entry);
@@ -150,6 +158,18 @@ final class KacheResource<T> implements _KacheResourceBase {
     }
   }
 
+  @override
+  void pausePolling() => _cancelPolling();
+
+  @override
+  void resumePolling() {
+    if (_isDisposed || !_didStartAutomaticLoad) {
+      return;
+    }
+    _pollAnchor = _client._now();
+    _schedulePolling();
+  }
+
   void _startAutomaticLoad() {
     if (_didStartAutomaticLoad || _isDisposed) {
       return;
@@ -166,6 +186,86 @@ final class KacheResource<T> implements _KacheResourceBase {
       );
     }
     _client._ensureOpen();
+  }
+
+  Future<KacheSnapshot<T>> _trackPolling(
+    Future<KacheSnapshot<T>> operation,
+  ) async {
+    try {
+      return await operation;
+    } finally {
+      if (!_isDisposed && !_client.isClosed) {
+        _pollAnchor = _client._now();
+        _schedulePolling();
+      }
+    }
+  }
+
+  void _schedulePolling() {
+    _cancelPolling();
+    final interval = query.policy.refreshInterval;
+    if (_isDisposed ||
+        _client.isClosed ||
+        _client._isPollingPaused ||
+        !_didStartAutomaticLoad ||
+        interval == null) {
+      return;
+    }
+    _pollTask = _client._scheduler(_remaining(interval), _poll);
+  }
+
+  Duration _remaining(Duration interval) {
+    final now = _client._now();
+    final local = _pollAnchor;
+    final shared = _entry.lastFetchFinishedAt;
+    final anchor = switch ((local, shared)) {
+      (null, null) => null,
+      (final DateTime value, null) => value,
+      (null, final DateTime value) => value,
+      (final DateTime left, final DateTime right) =>
+        left.isAfter(right) ? left : right,
+    };
+    if (anchor == null) {
+      return interval;
+    }
+    final elapsed = now.difference(anchor);
+    if (elapsed.isNegative) {
+      return interval;
+    }
+    return elapsed >= interval ? Duration.zero : interval - elapsed;
+  }
+
+  void _poll() {
+    _pollTask = null;
+    if (_isDisposed || _client.isClosed || _client._isPollingPaused) {
+      return;
+    }
+    final interval = query.policy.refreshInterval;
+    if (interval == null) {
+      return;
+    }
+    final remaining = _remaining(interval);
+    if (remaining > Duration.zero) {
+      _pollTask = _client._scheduler(remaining, _poll);
+      return;
+    }
+    unawaited(_runPoll());
+  }
+
+  Future<void> _runPoll() async {
+    try {
+      await refresh();
+    } on KacheLifecycleException {
+      if (!_isDisposed && !_client.isClosed) {
+        _pollAnchor = _client._now();
+        _schedulePolling();
+      }
+    }
+  }
+
+  void _cancelPolling() {
+    _pollTask?.cancel();
+    _pollTask = null;
   }
 
   void _closeUpdates() {

@@ -157,7 +157,7 @@ void main() {
       final snapshot = KacheSnapshot<String>.ready(
         data: 'cached',
         freshness: KacheFreshness.stale,
-        source: KacheDataSource.memory,
+        source: KacheDataSource.manual,
         fetchedAt: now,
         failure: primary,
         persistence: KachePersistenceState.failed(persistence),

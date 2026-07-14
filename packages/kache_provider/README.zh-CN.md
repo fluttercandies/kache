@@ -1,5 +1,9 @@
 # kache_provider
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [English](README.md)
 
 基于 `KacheController<T>` 实现的 Provider 接入。此包 re-export
@@ -87,8 +91,8 @@ provider 拥有 controller 和 resource handle，但始终借用 client。client
 ## 持久化与生命周期
 
 先打开 `kache_hive_ce` 等 backend，创建 client，再把 `KacheScope` 放在
-`KacheProvider` 上方以获得自动 resume 重验。Provider 适配器不会复制持久化或
-生命周期状态。
+`KacheProvider` 上方以获得生命周期感知的 `refreshInterval` 轮询和 resume 重验。
+Provider 适配器不会复制持久化或生命周期状态。
 
 ## 兼容性
 

@@ -1,5 +1,9 @@
 # kache
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [简体中文](README.zh-CN.md)
 
 The dependency-free Dart core of Kache. It provides typed cache keys, query
@@ -60,6 +64,8 @@ Future<void> showUser({
 The first listener receives the current snapshot immediately. A cached value
 can coexist with `isRefreshing` and `failure`, so UIs never need to discard
 usable data while a background operation is running or has failed.
+Common checks are available as `isLoading`, `isReady`, `isFailed`, `isStale`,
+and `hasFailure`.
 
 ## Queries and keys
 
@@ -81,6 +87,11 @@ backend configured on the client.
 
 Hard-expired data is deleted and never emitted. By default, a refresh error
 retains visible data.
+
+Set `refreshInterval` to poll after the first load while the handle remains
+active. Same-key handles still share one fetch. Client owners can call
+`pausePolling()` and `resumePolling()` without affecting manual commands.
+`KacheQuery.networkOnly` accepts the same interval without enabling storage.
 
 ## Commands
 
@@ -108,7 +119,8 @@ results. The original cause and stack trace are retained, while string output
 is sanitized. Configuration and lifecycle misuse throw immediately.
 
 Observe `KacheClient.events` for telemetry. Observer failures cannot interrupt
-the cache state machine.
+the cache state machine. Lookup events report `cacheHit`, `cacheMiss`, or
+`cacheExpired` with a `memory` or `persistence` layer and no payload.
 
 ## Ownership
 

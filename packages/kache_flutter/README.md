@@ -1,5 +1,9 @@
 # kache_flutter
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [简体中文](README.zh-CN.md)
 
 Flutter widgets and lifecycle integration for Kache, with no third-party state
@@ -44,7 +48,7 @@ Widget createUserApp({required UserApi api, required String userId}) {
           query: query,
           builder: (context, snapshot, controller) {
             if (!snapshot.hasData) {
-              if (snapshot.phase == KachePhase.failure) {
+              if (snapshot.isFailed) {
                 return const Center(child: Text('Could not load user'));
               }
               return const Center(child: CircularProgressIndicator());
@@ -72,8 +76,8 @@ Widget createUserApp({required UserApi api, required String userId}) {
 
 ## Widgets
 
-- `KacheScope` exposes a client and bridges `AppLifecycleState.resumed` to
-  policy-driven revalidation.
+- `KacheScope` exposes a client, pauses polling outside the foreground, and
+  bridges `AppLifecycleState.resumed` to policy-driven revalidation.
 - `KacheBuilder<T>` owns one `KacheController<T>` and rebuilds from complete
   snapshots.
 - `KacheListener<T>` performs side effects without rebuilding its child.
@@ -92,6 +96,10 @@ listeners, and controllers own resource handles, never the client.
 
 Lifecycle errors can be routed through `KacheScope.onError`. Without a custom
 handler, they are reported through `FlutterError.reportError`.
+
+Set `refreshInterval` on a query policy for active polling. The scope pauses
+those timers for inactive, hidden, paused, and detached app states, then starts
+a fresh interval on resume before applying `refreshOnResume`.
 
 ## Persistence
 

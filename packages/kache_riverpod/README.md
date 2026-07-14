@@ -1,5 +1,9 @@
 # kache_riverpod
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [简体中文](README.zh-CN.md)
 
 Riverpod providers and notifiers backed by the Kache core state machine. The
@@ -91,11 +95,15 @@ GC semantics.
 Provider disposal cancels the snapshot subscription and releases the resource.
 Late fetch completion cannot emit through a disposed notifier.
 
+`refreshInterval` works while the provider keeps its resource active. In pure
+Dart hosts, the client owner controls background timers with `pausePolling()`
+and `resumePolling()`.
+
 ## Flutter
 
 Wrap the app in `ProviderScope`. A `Consumer` can watch the Kache provider and
 read its notifier for commands. Use `KacheScope` from `kache_flutter` when the
-application also needs automatic resume revalidation.
+application also needs lifecycle-aware polling and resume revalidation.
 
 ## Compatibility
 

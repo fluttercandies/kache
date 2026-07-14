@@ -1,5 +1,9 @@
 # kache_bloc
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [简体中文](README.zh-CN.md)
 
 Pure Dart Bloc/Cubit integration for Kache. It exposes the complete
@@ -64,6 +68,10 @@ include `load`, `refresh`, `setData`, `updateData`, `invalidate`, and `remove`.
 Closing the Cubit cancels its subscription and releases the resource, but never
 closes the supplied client.
 
+Set `refreshInterval` on the query policy while the Cubit is active. Pure Dart
+client owners can pause and resume those timers with `pausePolling()` and
+`resumePolling()`.
+
 Subclass `KacheCubit<T>` when domain commands belong in the same Cubit. Keep
 network parameters in the query key.
 
@@ -84,8 +92,8 @@ Construct `KacheCubit` in `BlocProvider.create` and render with
 `BlocBuilder<KacheCubit<T>, KacheSnapshot<T>>`. Use `lazy: false` when the page
 must begin cache loading before the first descendant reads the Cubit.
 
-Wrap the application with `KacheScope` from `kache_flutter` when resume
-revalidation is required.
+Wrap the application with `KacheScope` from `kache_flutter` when lifecycle-aware
+polling and resume revalidation are required.
 
 ## Compatibility
 

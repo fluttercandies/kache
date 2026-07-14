@@ -1,5 +1,9 @@
 # kache_provider
 
+<p align="center">
+  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+</p>
+
 [简体中文](README.zh-CN.md)
 
 Provider widgets for Kache, implemented on top of `KacheController<T>`. This
@@ -91,8 +95,9 @@ state, dependency injection, or an owned `KacheScope`.
 ## Persistence and lifecycle
 
 Open a backend such as `kache_hive_ce`, create the client, and place
-`KacheScope` above `KacheProvider` for automatic resume revalidation. The
-Provider adapter does not duplicate persistence or lifecycle state.
+`KacheScope` above `KacheProvider` for lifecycle-aware `refreshInterval`
+polling and resume revalidation. The Provider adapter does not duplicate
+persistence or lifecycle state.
 
 ## Compatibility
 

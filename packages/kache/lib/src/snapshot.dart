@@ -19,9 +19,6 @@ enum KachePhase {
 
 /// Where the currently visible data originated.
 enum KacheDataSource {
-  /// An active in-memory cache entry.
-  memory,
-
   /// A persistence backend read.
   persistence,
 
@@ -204,6 +201,15 @@ final class KacheSnapshot<T> {
   /// The primary lifecycle phase.
   final KachePhase phase;
 
+  /// Whether this is the first-load state without visible data.
+  bool get isLoading => phase == KachePhase.loading;
+
+  /// Whether visible data is available.
+  bool get isReady => phase == KachePhase.ready;
+
+  /// Whether an operation failed without leaving visible data.
+  bool get isFailed => phase == KachePhase.failure;
+
   /// Whether this snapshot contains a value, including a nullable `null` value.
   final bool hasData;
 
@@ -226,11 +232,17 @@ final class KacheSnapshot<T> {
   /// Freshness of visible data, or `null` without data.
   final KacheFreshness? freshness;
 
+  /// Whether visible data needs revalidation.
+  bool get isStale => freshness == KacheFreshness.stale;
+
   /// Origin of visible data, or `null` without data.
   final KacheDataSource? source;
 
   /// The latest relevant operation failure, if any.
   final KacheFailure? failure;
+
+  /// Whether either the primary operation or persistence has failed.
+  bool get hasFailure => failure != null || persistence?.failure != null;
 
   /// UTC time at which visible data was fetched or manually set.
   final DateTime? fetchedAt;
