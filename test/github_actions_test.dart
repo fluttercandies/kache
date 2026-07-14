@@ -5,7 +5,7 @@ import 'package:yaml/yaml.dart';
 
 const _workflowPath = '.github/workflows/ci.yaml';
 const _checkoutAction =
-    'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5';
+    'actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0';
 const _flutterAction =
     'subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2';
 
