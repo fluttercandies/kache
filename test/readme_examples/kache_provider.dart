@@ -25,22 +25,28 @@ Widget createUserView({
     client: client,
     query: query,
     child: KacheConsumer<User>(
-      builder: (context, snapshot, controller, child) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return ListTile(
-          title: Text(snapshot.requireData.name),
-          subtitle: snapshot.failure == null
-              ? null
-              : const Text('Showing cached data'),
-          trailing: IconButton(
-            tooltip: 'Refresh user',
-            onPressed: controller.refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        );
-      },
+      builder: (context, snapshot, controller, child) => snapshot.when(
+        idle: () => const SizedBox.shrink(),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        failed: (_) => const Center(child: Text('Could not load user')),
+        ready: (user) => _userTile(user, controller),
+        refreshError: (user, _) =>
+            _userTile(user, controller, refreshFailed: true),
+      ),
     ),
   );
 }
+
+Widget _userTile(
+  User user,
+  KacheController<User> controller, {
+  bool refreshFailed = false,
+}) => ListTile(
+  title: Text(user.name),
+  subtitle: refreshFailed ? const Text('Showing cached data') : null,
+  trailing: IconButton(
+    tooltip: 'Refresh user',
+    onPressed: controller.refresh,
+    icon: const Icon(Icons.refresh),
+  ),
+);

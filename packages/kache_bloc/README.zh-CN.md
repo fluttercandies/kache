@@ -45,11 +45,15 @@ Future<void> observeUser(UserApi api, String userId) async {
       fetch: (_) => api.fetchUser(userId),
     ),
   );
-  final subscription = cubit.stream.listen((snapshot) {
-    if (snapshot.hasData) {
-      print(snapshot.requireData.name);
-    }
-  });
+  final subscription = cubit.stream.listen(
+    (snapshot) => snapshot.when<void>(
+      idle: () {},
+      loading: () => print('Loading user'),
+      ready: (user) => print(user.name),
+      refreshError: (user, _) => print('${user.name} (refresh failed)'),
+      failed: (_) => print('Could not load user'),
+    ),
+  );
 
   try {
     await cubit.load();
@@ -66,6 +70,10 @@ Future<void> observeUser(UserApi api, String userId) async {
 `KacheCubit<T>` 拥有一个核心 resource，并发出它的快照。命令包括 `load`、
 `refresh`、`setData`、`updateData`、`invalidate` 和 `remove`。关闭 Cubit 会取消
 订阅并释放 resource，但不会关闭传入的 client。
+
+`refresh` 返回 `Future<KacheSnapshot<T>>`，命令式调用方可以检查完成后的状态。使用
+`snapshot.when` 渲染可以显式处理 idle 和保留数据的刷新失败；Bloc 适配器不会创建
+第二套异步状态模型。
 
 Cubit 活动时可在 query policy 设置 `refreshInterval`。纯 Dart client owner 可用
 `pausePolling()` 和 `resumePolling()` 暂停与恢复这些计时器。

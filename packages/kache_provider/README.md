@@ -49,25 +49,31 @@ Widget createUserView({
     client: client,
     query: query,
     child: KacheConsumer<User>(
-      builder: (context, snapshot, controller, child) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return ListTile(
-          title: Text(snapshot.requireData.name),
-          subtitle: snapshot.failure == null
-              ? null
-              : const Text('Showing cached data'),
-          trailing: IconButton(
-            tooltip: 'Refresh user',
-            onPressed: controller.refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        );
-      },
+      builder: (context, snapshot, controller, child) => snapshot.when(
+        idle: () => const SizedBox.shrink(),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        failed: (_) => const Center(child: Text('Could not load user')),
+        ready: (user) => _userTile(user, controller),
+        refreshError: (user, _) =>
+            _userTile(user, controller, refreshFailed: true),
+      ),
     ),
   );
 }
+
+Widget _userTile(
+  User user,
+  KacheController<User> controller, {
+  bool refreshFailed = false,
+}) => ListTile(
+  title: Text(user.name),
+  subtitle: refreshFailed ? const Text('Showing cached data') : null,
+  trailing: IconButton(
+    tooltip: 'Refresh user',
+    onPressed: controller.refresh,
+    icon: const Icon(Icons.refresh),
+  ),
+);
 ```
 
 ## Provider widgets
@@ -79,6 +85,10 @@ the same key keeps shared data; a new key rebinds the controller.
 `KacheConsumer<T>` rebuilds from the current snapshot and provides the
 controller for commands. It accepts a static `child` using normal Provider
 consumer semantics.
+
+Use `snapshot.when` for exhaustive idle/loading/data/error rendering. The
+controller's `refresh` returns `Future<KacheSnapshot<T>>`; Provider only adapts
+the core resource lifecycle and does not duplicate its state machine.
 
 Use `context.readKache<T>()` for commands without subscribing and
 `context.watchKache<T>()` to rebuild from the nearest snapshot.

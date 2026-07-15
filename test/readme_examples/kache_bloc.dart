@@ -22,11 +22,15 @@ Future<void> observeUser(UserApi api, String userId) async {
       fetch: (_) => api.fetchUser(userId),
     ),
   );
-  final subscription = cubit.stream.listen((snapshot) {
-    if (snapshot.hasData) {
-      print(snapshot.requireData.name);
-    }
-  });
+  final subscription = cubit.stream.listen(
+    (snapshot) => snapshot.when<void>(
+      idle: () {},
+      loading: () => print('Loading user'),
+      ready: (user) => print(user.name),
+      refreshError: (user, _) => print('${user.name} (refresh failed)'),
+      failed: (_) => print('Could not load user'),
+    ),
+  );
 
   try {
     await cubit.load();

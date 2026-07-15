@@ -36,7 +36,7 @@ abstract interface class UserApi {
 Future<void> showUser({
   required UserApi api,
   required String userId,
-  required void Function(KacheSnapshot<User>) render,
+  required void Function(String) render,
 }) async {
   final client = KacheClient();
   final query = KacheQuery<User>.memory(
@@ -48,7 +48,17 @@ Future<void> showUser({
     policy: KachePolicy.staleWhileRevalidate(),
   );
   final resource = client.watch(query);
-  final subscription = resource.stream.listen(render);
+  final subscription = resource.stream.listen(
+    (snapshot) => render(
+      snapshot.when(
+        idle: () => 'Idle',
+        loading: () => 'Loading',
+        ready: (user) => user.name,
+        refreshError: (user, _) => '${user.name} (refresh failed)',
+        failed: (_) => 'Could not load user',
+      ),
+    ),
+  );
 
   try {
     await resource.load();
@@ -60,10 +70,10 @@ Future<void> showUser({
 }
 ```
 
-第一个 listener 会立即收到当前快照。有缓存时，`isRefreshing` 和 `failure` 可以与
-数据同时存在，因此后台操作进行中或失败后都不需要丢弃可用数据。
-常见判断可直接使用 `isLoading`、`isReady`、`isFailed`、`isStale` 和
-`hasFailure`。
+第一个 listener 会立即收到当前快照。`when` 要求显式处理 idle、loading、ready、
+保留数据的刷新失败和无数据失败；刷新时默认继续进入 `ready`，且不会静默隐藏刷新
+错误。局部处理使用 `maybeWhen`，转换可见数据使用 `mapData`，两者都不会创建第二套
+状态语义。
 
 ## 查询与 key
 

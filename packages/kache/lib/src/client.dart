@@ -21,6 +21,35 @@ part 'entry_persistence.dart';
 part 'entry_snapshot.dart';
 part 'resource.dart';
 
+typedef _KachePersistenceError = ({
+  Object cause,
+  StackTrace stackTrace,
+  KachePersistenceStage stage,
+});
+
+_KachePersistenceError _normalizePersistenceError({
+  required Object error,
+  required StackTrace stackTrace,
+  required KachePersistenceOperation expectedOperation,
+  required KachePersistenceStage fallbackStage,
+}) {
+  if (error case final KachePersistenceException persistenceError) {
+    if (persistenceError.operation == expectedOperation) {
+      return (
+        cause: persistenceError.cause,
+        stackTrace: persistenceError.stackTrace,
+        stage: persistenceError.stage,
+      );
+    }
+    return (
+      cause: persistenceError,
+      stackTrace: stackTrace,
+      stage: KachePersistenceStage.backend,
+    );
+  }
+  return (cause: error, stackTrace: stackTrace, stage: fallbackStage);
+}
+
 /// Coordinates typed cache resources, persistence, and shared key state.
 final class KacheClient {
   /// Creates a cache client with optional [persistence].
@@ -477,18 +506,20 @@ final class KacheClient {
     required StackTrace stackTrace,
     required KacheNamespace? namespace,
   }) {
-    final cause = error is KachePersistenceException ? error.cause : error;
-    final originalStack =
-        error is KachePersistenceException ? error.stackTrace : stackTrace;
-    final stage = error is KachePersistenceException
-        ? error.stage
-        : KachePersistenceStage.backend;
+    final details = _normalizePersistenceError(
+      error: error,
+      stackTrace: stackTrace,
+      expectedOperation: namespace == null
+          ? KachePersistenceOperation.clear
+          : KachePersistenceOperation.clearNamespace,
+      fallbackStage: KachePersistenceStage.backend,
+    );
     return KacheFailure(
       kind: KacheFailureKind.clear,
       namespace: namespace,
-      cause: cause,
-      stackTrace: originalStack,
-      persistenceStage: stage,
+      cause: details.cause,
+      stackTrace: details.stackTrace,
+      persistenceStage: details.stage,
     );
   }
 

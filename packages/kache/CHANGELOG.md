@@ -1,3 +1,12 @@
+## 1.1.0
+
+- Added exhaustive `when`, partial `maybeWhen`, and metadata-preserving
+  `mapData` APIs to `KacheSnapshot`.
+- Added a dedicated retained-data refresh error branch so rendering helpers
+  cannot silently hide failed refreshes.
+- Hardened persistence error normalization against backend operation contract
+  mismatches while preserving original errors and stack traces.
+
 ## 1.0.1
 
 - Lowered the verified Dart SDK requirement from 3.9 to 3.5.

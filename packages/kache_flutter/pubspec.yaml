@@ -1,6 +1,6 @@
 name: kache_flutter
 description: Flutter lifecycle and widget integrations for the Kache caching library.
-version: 1.0.1
+version: 1.1.0
 homepage: https://github.com/fluttercandies/kache
 repository: https://github.com/fluttercandies/kache/tree/main/packages/kache_flutter
 issue_tracker: https://github.com/fluttercandies/kache/issues
@@ -19,7 +19,7 @@ resolution: workspace
 dependencies:
   flutter:
     sdk: flutter
-  kache: ^1.0.1
+  kache: ^1.1.0
 
 dev_dependencies:
   flutter_test:

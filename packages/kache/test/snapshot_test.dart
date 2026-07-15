@@ -147,6 +147,184 @@ void main() {
     });
   });
 
+  group('KacheSnapshot branching', () {
+    String render(KacheSnapshot<String> snapshot, {bool skip = true}) =>
+        snapshot.when(
+          skipLoadingOnRefresh: skip,
+          idle: () => 'idle',
+          loading: () => 'loading',
+          ready: (data) => 'ready:$data',
+          refreshError: (data, failure) =>
+              'refresh-error:$data:${failure.kind.name}',
+          failed: (failure) => 'failed:${failure.kind.name}',
+        );
+
+    test('when dispatches every primary phase', () {
+      expect(render(KacheSnapshot<String>.idle()), 'idle');
+      expect(render(KacheSnapshot<String>.loading()), 'loading');
+      expect(
+        render(
+          KacheSnapshot<String>.ready(
+            data: 'Ada',
+            freshness: KacheFreshness.fresh,
+            source: KacheDataSource.fetch,
+            fetchedAt: fetchedAt,
+          ),
+        ),
+        'ready:Ada',
+      );
+      expect(
+        render(KacheSnapshot<String>.failed(failure: _fetchFailure(key))),
+        'failed:fetch',
+      );
+    });
+
+    test('when keeps cached data visible while refreshing by default', () {
+      final snapshot = KacheSnapshot<String>.ready(
+        data: 'cached',
+        freshness: KacheFreshness.stale,
+        source: KacheDataSource.persistence,
+        fetchedAt: fetchedAt,
+        isRefreshing: true,
+      );
+
+      expect(render(snapshot), 'ready:cached');
+      expect(render(snapshot, skip: false), 'loading');
+    });
+
+    test('when never hides a refresh error behind ready data', () {
+      final snapshot = KacheSnapshot<String>.ready(
+        data: 'cached',
+        freshness: KacheFreshness.stale,
+        source: KacheDataSource.persistence,
+        fetchedAt: fetchedAt,
+        failure: _fetchFailure(key),
+      );
+
+      expect(render(snapshot), 'refresh-error:cached:fetch');
+    });
+
+    test('when treats cached nullable null as ready data', () {
+      final snapshot = KacheSnapshot<String?>.ready(
+        data: null,
+        freshness: KacheFreshness.fresh,
+        source: KacheDataSource.fetch,
+        fetchedAt: fetchedAt,
+      );
+
+      expect(
+        snapshot.when(
+          idle: () => 'idle',
+          loading: () => 'loading',
+          ready: (data) => data ?? 'cached-null',
+          refreshError: (_, __) => 'refresh-error',
+          failed: (_) => 'failed',
+        ),
+        'cached-null',
+      );
+    });
+
+    test('maybeWhen invokes a supplied branch or the fallback', () {
+      final ready = KacheSnapshot<String>.ready(
+        data: 'Ada',
+        freshness: KacheFreshness.fresh,
+        source: KacheDataSource.fetch,
+        fetchedAt: fetchedAt,
+      );
+
+      expect(
+        ready.maybeWhen(ready: (data) => data, orElse: () => 'fallback'),
+        'Ada',
+      );
+      expect(
+        KacheSnapshot<String>.idle().maybeWhen(
+          ready: (data) => data,
+          orElse: () => 'fallback',
+        ),
+        'fallback',
+      );
+    });
+  });
+
+  group('KacheSnapshot mapData', () {
+    test('converts data and preserves every orthogonal state field', () {
+      final failure = _fetchFailure(key);
+      final persistence = KachePersistenceState.failed(
+        _persistenceFailure(key),
+      );
+      final snapshot = KacheSnapshot<String>.ready(
+        data: 'Ada',
+        freshness: KacheFreshness.stale,
+        source: KacheDataSource.persistence,
+        fetchedAt: fetchedAt,
+        isRefreshing: true,
+        failure: failure,
+        revision: 8,
+        persistence: persistence,
+      );
+
+      final mapped = snapshot.mapData((data) => data.length);
+
+      expect(mapped.requireData, 3);
+      expect(mapped.phase, snapshot.phase);
+      expect(mapped.freshness, snapshot.freshness);
+      expect(mapped.source, snapshot.source);
+      expect(mapped.fetchedAt, snapshot.fetchedAt);
+      expect(mapped.isRefreshing, snapshot.isRefreshing);
+      expect(mapped.failure, same(failure));
+      expect(mapped.revision, snapshot.revision);
+      expect(mapped.persistence, same(persistence));
+    });
+
+    test('maps cached nullable null instead of treating it as absent', () {
+      var calls = 0;
+      final snapshot = KacheSnapshot<String?>.ready(
+        data: null,
+        freshness: KacheFreshness.fresh,
+        source: KacheDataSource.fetch,
+        fetchedAt: fetchedAt,
+      );
+
+      final mapped = snapshot.mapData((data) {
+        calls += 1;
+        return data ?? 'null';
+      });
+
+      expect(calls, 1);
+      expect(mapped.requireData, 'null');
+    });
+
+    test('preserves empty states without invoking the converter', () {
+      final failure = _fetchFailure(key);
+      final snapshots = <KacheSnapshot<String>>[
+        KacheSnapshot<String>.idle(revision: 1),
+        KacheSnapshot<String>.loading(revision: 2),
+        KacheSnapshot<String>.failed(failure: failure, revision: 3),
+      ];
+
+      for (final snapshot in snapshots) {
+        final mapped = snapshot.mapData<int>(
+          (_) => throw StateError('converter must not run'),
+        );
+        expect(mapped.phase, snapshot.phase);
+        expect(mapped.revision, snapshot.revision);
+        expect(mapped.failure, snapshot.failure);
+      }
+    });
+
+    test('propagates conversion errors without fabricating a failure', () {
+      final cause = StateError('conversion failed');
+      final snapshot = KacheSnapshot<String>.ready(
+        data: 'Ada',
+        freshness: KacheFreshness.fresh,
+        source: KacheDataSource.fetch,
+        fetchedAt: fetchedAt,
+      );
+
+      expect(() => snapshot.mapData<int>((_) => throw cause), throwsA(cause));
+    });
+  });
+
   group('KachePersistenceState', () {
     test('failed retains the exact persistence failure', () {
       final failure = _persistenceFailure(key);

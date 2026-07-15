@@ -1,3 +1,10 @@
+## 1.1.0
+
+- Exposed the new `KacheSnapshot` rendering and data-mapping APIs through Bloc
+  and Cubit state.
+- Locked command return types to `Future<KacheSnapshot<T>>` across bindings and
+  cubits.
+
 ## 1.0.1
 
 - Lowered the verified Dart SDK requirement from 3.9 to 3.5.

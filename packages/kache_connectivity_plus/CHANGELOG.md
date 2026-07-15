@@ -1,3 +1,9 @@
+## 1.1.0
+
+- Updated the core dependency for the new snapshot rendering and hardened
+  persistence contracts.
+- Kept reconnect state mapping and ownership behavior unchanged.
+
 ## 1.0.1
 
 - Updated connectivity_plus to 7.2.0.

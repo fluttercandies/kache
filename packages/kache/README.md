@@ -37,7 +37,7 @@ abstract interface class UserApi {
 Future<void> showUser({
   required UserApi api,
   required String userId,
-  required void Function(KacheSnapshot<User>) render,
+  required void Function(String) render,
 }) async {
   final client = KacheClient();
   final query = KacheQuery<User>.memory(
@@ -49,7 +49,17 @@ Future<void> showUser({
     policy: KachePolicy.staleWhileRevalidate(),
   );
   final resource = client.watch(query);
-  final subscription = resource.stream.listen(render);
+  final subscription = resource.stream.listen(
+    (snapshot) => render(
+      snapshot.when(
+        idle: () => 'Idle',
+        loading: () => 'Loading',
+        ready: (user) => user.name,
+        refreshError: (user, _) => '${user.name} (refresh failed)',
+        failed: (_) => 'Could not load user',
+      ),
+    ),
+  );
 
   try {
     await resource.load();
@@ -61,11 +71,11 @@ Future<void> showUser({
 }
 ```
 
-The first listener receives the current snapshot immediately. A cached value
-can coexist with `isRefreshing` and `failure`, so UIs never need to discard
-usable data while a background operation is running or has failed.
-Common checks are available as `isLoading`, `isReady`, `isFailed`, `isStale`,
-and `hasFailure`.
+The first listener receives the current snapshot immediately. `when` requires
+idle, loading, ready, retained-data refresh error, and no-data failure branches.
+It keeps cached data in `ready` while refreshing by default and never silently
+hides a refresh failure. Use `maybeWhen` for partial handling and `mapData` to
+transform visible data without losing cache metadata or operation state.
 
 ## Queries and keys
 

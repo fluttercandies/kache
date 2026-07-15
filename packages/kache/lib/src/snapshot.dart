@@ -257,6 +257,101 @@ final class KacheSnapshot<T> {
   /// Persistence status for persisted queries, otherwise `null`.
   final KachePersistenceState? persistence;
 
+  /// Selects a result from the snapshot's user-visible state.
+  ///
+  /// A refresh with visible data calls [ready] by default. Set
+  /// [skipLoadingOnRefresh] to `false` to call [loading] instead. A failed
+  /// refresh always calls [refreshError] with both the retained data and its
+  /// failure, so it cannot be mistaken for an ordinary ready state.
+  R when<R>({
+    bool skipLoadingOnRefresh = true,
+    required R Function() idle,
+    required R Function() loading,
+    required R Function(T data) ready,
+    required R Function(T data, KacheFailure failure) refreshError,
+    required R Function(KacheFailure failure) failed,
+  }) {
+    if (hasData) {
+      final data = requireData;
+      final refreshFailure = failure;
+      if (refreshFailure != null) {
+        return refreshError(data, refreshFailure);
+      }
+      if (isRefreshing && !skipLoadingOnRefresh) {
+        return loading();
+      }
+      return ready(data);
+    }
+    return switch (phase) {
+      KachePhase.idle => idle(),
+      KachePhase.loading => loading(),
+      KachePhase.ready => throw StateError(
+          'A ready KacheSnapshot must contain data.',
+        ),
+      KachePhase.failure => failed(failure!),
+    };
+  }
+
+  /// Selects a supplied state branch, otherwise returning [orElse].
+  ///
+  /// Branch priority is identical to [when]. In particular, omitting
+  /// [refreshError] uses [orElse] rather than silently treating the snapshot as
+  /// ordinary ready data.
+  R maybeWhen<R>({
+    bool skipLoadingOnRefresh = true,
+    R Function()? idle,
+    R Function()? loading,
+    R Function(T data)? ready,
+    R Function(T data, KacheFailure failure)? refreshError,
+    R Function(KacheFailure failure)? failed,
+    required R Function() orElse,
+  }) =>
+      when(
+        skipLoadingOnRefresh: skipLoadingOnRefresh,
+        idle: idle ?? orElse,
+        loading: loading ?? orElse,
+        ready: ready ?? (_) => orElse(),
+        refreshError: refreshError ?? (_, __) => orElse(),
+        failed: failed ?? (_) => orElse(),
+      );
+
+  /// Converts visible data while preserving all snapshot metadata and state.
+  ///
+  /// The converter runs exactly once when [hasData] is true, including for a
+  /// cached nullable `null`. Converter errors propagate unchanged.
+  KacheSnapshot<R> mapData<R>(R Function(T data) convert) {
+    if (hasData) {
+      return KacheSnapshot<R>.ready(
+        data: convert(requireData),
+        freshness: freshness!,
+        source: source!,
+        fetchedAt: fetchedAt!,
+        isRefreshing: isRefreshing,
+        failure: failure,
+        revision: revision,
+        persistence: persistence,
+      );
+    }
+    return switch (phase) {
+      KachePhase.idle => KacheSnapshot<R>.idle(
+          revision: revision,
+          persistence: persistence,
+        ),
+      KachePhase.loading => KacheSnapshot<R>.loading(
+          revision: revision,
+          persistence: persistence,
+        ),
+      KachePhase.ready => throw StateError(
+          'A ready KacheSnapshot must contain data.',
+        ),
+      KachePhase.failure => KacheSnapshot<R>.failed(
+          failure: failure!,
+          revision: revision,
+          persistence: persistence,
+        ),
+    };
+  }
+
   /// Throws [KacheCommandException] when this snapshot contains failures.
   void throwIfFailed() {
     final failures = <KacheFailure>[];

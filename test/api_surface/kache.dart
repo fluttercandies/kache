@@ -75,3 +75,6 @@ KacheObserver verifyObserver(KacheObserver observer) => observer;
 KachePersistenceMaintenance verifyMaintenance(
   KachePersistenceMaintenance maintenance,
 ) => maintenance;
+
+Future<KacheSnapshot<int>> verifyResourceRefresh(KacheResource<int> resource) =>
+    resource.refresh();

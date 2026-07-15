@@ -25,3 +25,7 @@ KacheListenWhen<int> verifyListenWhen(KacheListenWhen<int> listenWhen) =>
 
 KacheClient? verifyScopeLookup(BuildContext context) =>
     KacheScope.maybeOf(context);
+
+Future<KacheSnapshot<int>> verifyControllerRefresh(
+  KacheController<int> controller,
+) => controller.refresh();

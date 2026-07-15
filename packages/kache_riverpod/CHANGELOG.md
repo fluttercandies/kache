@@ -1,3 +1,10 @@
+## 1.1.0
+
+- Documented and tested named-record arguments for multi-parameter provider
+  families.
+- Exposed the new lossless `KacheSnapshot` rendering helpers without adding a
+  second `AsyncValue` state source.
+
 ## 1.0.1
 
 - Lowered the verified Dart SDK requirement to the Riverpod floor of 3.7.

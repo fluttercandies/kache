@@ -1,15 +1,21 @@
 part of 'store.dart';
 
 extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
-  HiveCeBinding<T> _ensureBinding<T>(
+  KachePersistenceBinding<T> _ensureBinding<T>(
     KachePersistenceBinding<T> binding,
     KachePersistenceOperation operation,
   ) {
     binding.ensureBackend(this);
-    if (binding is! HiveCeBinding<T> || binding._hasTypeConflict) {
-      _throwCompatibility(operation);
+    if (binding is HiveCeBinding<T>) {
+      if (binding._hasTypeConflict) {
+        _throwCompatibility(operation);
+      }
+      return binding;
     }
-    return binding;
+    if (binding is HiveCeAdapterBinding<T>) {
+      return binding;
+    }
+    _throwCompatibility(operation);
   }
 
   HiveCeEnvelope _decodeEnvelope(Uint8List raw) {

@@ -5,10 +5,12 @@ import 'dart:typed_data';
 import 'package:hive_ce/hive_ce.dart';
 import 'package:kache/kache.dart';
 
+import 'adapter_envelope.dart';
 import 'codec.dart';
 import 'envelope.dart';
 
 part 'binding.dart';
+part 'adapter.dart';
 part 'box_lease.dart';
 part 'store_helpers.dart';
 
@@ -25,6 +27,7 @@ enum HiveCeBoxOwnership {
 final class HiveCeKacheStore implements KachePersistenceBackend {
   HiveCeKacheStore._({
     required this.box,
+    required this.hive,
     required this.boxOwnership,
     required Future<void> Function() releaseBox,
   }) : _releaseBox = releaseBox;
@@ -33,13 +36,18 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   factory HiveCeKacheStore.fromBox(
     Box<Object?> box, {
     HiveCeBoxOwnership ownership = HiveCeBoxOwnership.borrowed,
-  }) =>
-      HiveCeKacheStore._(
-        box: box,
-        boxOwnership: ownership,
-        releaseBox:
-            ownership == HiveCeBoxOwnership.owned ? box.close : _completeVoid,
-      );
+    HiveInterface? hive,
+  }) {
+    final targetHive = hive ?? Hive;
+    _validateBoxOwner(targetHive, box);
+    return HiveCeKacheStore._(
+      box: box,
+      hive: targetHive,
+      boxOwnership: ownership,
+      releaseBox:
+          ownership == HiveCeBoxOwnership.owned ? box.close : _completeVoid,
+    );
+  }
 
   /// Opens or leases a Hive box.
   ///
@@ -65,6 +73,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     );
     return HiveCeKacheStore._(
       box: lease.box,
+      hive: targetHive,
       boxOwnership: lease.isOwned
           ? HiveCeBoxOwnership.owned
           : HiveCeBoxOwnership.borrowed,
@@ -72,8 +81,11 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     );
   }
 
-  /// The physical Hive box. Kache writes only [Uint8List] values.
+  /// The physical Hive box used for byte or native adapter records.
   final Box<Object?> box;
+
+  /// The Hive registry used by [box].
+  final HiveInterface hive;
 
   /// Whether this store participates in closing [box].
   final HiveCeBoxOwnership boxOwnership;
@@ -104,6 +116,25 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     );
   }
 
+  /// Creates a binding using an already registered Hive CE [adapter].
+  ///
+  /// The adapter is not registered or owned by this store. Its type id must be
+  /// registered on [hive] before this method is called.
+  HiveCeAdapterBinding<T> bindAdapter<T>(TypeAdapter<dynamic> adapter) {
+    _validateAdapterTypeId(adapter.typeId);
+    if (!hive.isAdapterRegistered(adapter.typeId)) {
+      throw ArgumentError.value(
+        adapter.typeId,
+        'adapter',
+        'The Hive CE TypeAdapter must be registered before binding.',
+      );
+    }
+    return HiveCeAdapterBinding<T>._(
+      backend: this,
+      typeId: adapter.typeId,
+    );
+  }
+
   @override
   Future<KachePersistenceRead<T>?> read<T>({
     required KacheKey key,
@@ -128,6 +159,13 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     if (raw == null) {
       return null;
     }
+    if (hiveBinding is HiveCeAdapterBinding<T>) {
+      return _readAdapter<T>(
+        key: key,
+        binding: hiveBinding,
+        raw: raw,
+      );
+    }
     if (raw is! Uint8List) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
@@ -137,11 +175,12 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       );
     }
     final rawBytes = raw;
+    final byteBinding = hiveBinding as HiveCeBinding<T>;
     final envelope = _decodeEnvelope(rawBytes);
-    if (envelope.codecId != hiveBinding.codecId) {
+    if (envelope.codecId != byteBinding.codecId) {
       _throwCompatibility(KachePersistenceOperation.read);
     }
-    if (envelope.schema > hiveBinding.schema) {
+    if (envelope.schema > byteBinding.schema) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
         stage: KachePersistenceStage.migration,
@@ -151,10 +190,10 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     }
 
     final T data;
-    if (envelope.schema == hiveBinding.schema) {
-      data = _decodeCurrent(hiveBinding, envelope.payload);
+    if (envelope.schema == byteBinding.schema) {
+      data = _decodeCurrent(byteBinding, envelope.payload);
     } else {
-      data = _migrate(hiveBinding, envelope.payload, envelope.schema);
+      data = _migrate(byteBinding, envelope.payload, envelope.schema);
     }
     final entry = KachePersistedEntry<T>(
       data: data,
@@ -163,12 +202,12 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
         isInvalidated: envelope.isInvalidated,
       ),
     );
-    if (envelope.schema == hiveBinding.schema) {
+    if (envelope.schema == byteBinding.schema) {
       return KachePersistenceRead<T>(entry: entry);
     }
     return KachePersistenceRead<T>(
       entry: entry,
-      maintenance: () => _rewriteMigrated(key, hiveBinding, entry, rawBytes),
+      maintenance: () => _rewriteMigrated(key, byteBinding, entry, rawBytes),
     );
   }
 
@@ -183,10 +222,20 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       binding,
       KachePersistenceOperation.write,
     );
-    _ensureExistingCodecCompatible(key, hiveBinding.codecId);
+    if (hiveBinding is HiveCeAdapterBinding<T>) {
+      _ensureExistingAdapterCompatible(key, hiveBinding.typeId);
+      await _writeAdapter<T>(
+        key: key,
+        binding: hiveBinding,
+        entry: entry,
+      );
+      return;
+    }
+    final byteBinding = hiveBinding as HiveCeBinding<T>;
+    _ensureExistingCodecCompatible(key, byteBinding.codecId);
     late final Uint8List payload;
     try {
-      payload = Uint8List.fromList(hiveBinding.codec.encode(entry.data));
+      payload = Uint8List.fromList(byteBinding.codec.encode(entry.data));
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.write,
@@ -198,8 +247,8 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     final record = HiveCeEnvelope.encode(
       fetchedAt: entry.metadata.fetchedAt,
       isInvalidated: entry.metadata.isInvalidated,
-      schema: hiveBinding.schema,
-      codecId: hiveBinding.codecId,
+      schema: byteBinding.schema,
+      codecId: byteBinding.codecId,
       payload: payload,
     );
     try {

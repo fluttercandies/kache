@@ -20,7 +20,7 @@ and state-management integrations are separate packages.
 | --- | --- | --- |
 | `kache` | Cache state machine, concurrency, policies, memory backend | Dart SDK only |
 | `kache_flutter` | Scope, controller, builder, listener, app lifecycle | Flutter + `kache` |
-| `kache_hive_ce` | Versioned Hive CE persistence, codecs, migrations | Hive CE + `kache` |
+| `kache_hive_ce` | Hive CE TypeAdapter/native records, codecs, migrations | Hive CE + `kache` |
 | `kache_connectivity_plus` | Automatic reconnect revalidation | connectivity_plus + `kache` |
 | `kache_riverpod` | Provider/family/auto-dispose notifier integration | Riverpod + `kache` |
 | `kache_bloc` | `KacheCubit` and composable binding | Bloc + `kache` |
@@ -57,45 +57,57 @@ Widget createProfileApp({required Future<Profile> Function() fetchProfile}) =>
               key: KacheKey('profile'),
               fetch: (_) => fetchProfile(),
             ),
-            builder: (context, snapshot, controller) {
-              if (!snapshot.hasData) {
-                return Center(
-                  child: snapshot.isFailed
-                      ? FilledButton(
-                          onPressed: controller.load,
-                          child: const Text('Try again'),
-                        )
-                      : const CircularProgressIndicator(),
-                );
-              }
-              return RefreshIndicator(
-                onRefresh: () async => controller.refresh(),
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: <Widget>[
-                    ListTile(
-                      title: Text(snapshot.requireData.name),
-                      subtitle: snapshot.hasFailure
-                          ? const Text('Refresh failed - showing cached data')
-                          : null,
-                      trailing: snapshot.isRefreshing
-                          ? const CircularProgressIndicator()
-                          : const Icon(Icons.cloud_done),
-                    ),
-                  ],
+            builder: (context, snapshot, controller) => snapshot.when(
+              idle: () => const SizedBox.shrink(),
+              loading: () => const Center(child: CircularProgressIndicator()),
+              failed: (_) => Center(
+                child: FilledButton(
+                  onPressed: controller.load,
+                  child: const Text('Try again'),
                 ),
-              );
-            },
+              ),
+              ready: (profile) => _profileList(
+                profile,
+                controller,
+                refreshing: snapshot.isRefreshing,
+              ),
+              refreshError: (profile, _) =>
+                  _profileList(profile, controller, refreshFailed: true),
+            ),
           ),
         ),
       ),
     );
+
+Widget _profileList(
+  Profile profile,
+  KacheController<Profile> controller, {
+  bool refreshing = false,
+  bool refreshFailed = false,
+}) => RefreshIndicator(
+  onRefresh: () async => controller.refresh(),
+  child: ListView(
+    physics: const AlwaysScrollableScrollPhysics(),
+    children: <Widget>[
+      ListTile(
+        title: Text(profile.name),
+        subtitle: refreshFailed
+            ? const Text('Refresh failed - showing cached data')
+            : null,
+        trailing: refreshing
+            ? const CircularProgressIndicator()
+            : const Icon(Icons.cloud_done),
+      ),
+    ],
+  ),
+);
 ```
 
-`KacheBuilder` loads automatically. With data, the page stays usable while
-`isRefreshing` is true; if that refresh fails, `hasFailure` becomes true
-without discarding the cached profile. Pull to refresh uses the same query and
-request deduplication.
+`KacheBuilder` loads automatically. `when` handles idle, first loading,
+no-data failure, ready data, and retained-data refresh failure exhaustively.
+Refreshing keeps calling `ready` by default; use `skipLoadingOnRefresh: false`
+only when a refresh should replace the data UI. Pull to refresh uses the same
+query and request deduplication.
 
 `KacheQuery.memory` keeps data for the lifetime of the client. Use
 `KacheQuery.persisted` with `kache_hive_ce` when data must survive an app
@@ -147,7 +159,9 @@ that backend. The official implementation is `kache_hive_ce`.
 Serialization is intentionally not part of the core package. A storage
 adapter owns codecs, physical records, schema versions, migrations, encryption
 configuration, and corruption handling. The core only receives typed values
-and cache metadata.
+and cache metadata. `kache_hive_ce` can reuse an already registered
+`TypeAdapter<T>` with `store.bindAdapter<T>(adapter)` or use its explicit byte
+codec binding for independent schema control.
 
 ## Custom persistence
 
@@ -159,7 +173,12 @@ another system. Your backend must:
 - preserve `KachePersistedMetadata`;
 - implement exact namespace-prefix clearing;
 - wrap I/O and codec errors in `KachePersistenceException`;
+- report the actual persistence operation in every wrapped exception;
 - define idempotent ownership and `close()` behavior.
+
+The core validates the operation field at its boundary. A mismatched backend
+exception is treated as a backend failure for the operation actually running,
+while the original exception and stack trace remain available in the failure.
 
 Use `MemoryKachePersistence` and the contract tests as a reference. Do not add
 codec methods to `KacheQuery` or the core persistence protocol.

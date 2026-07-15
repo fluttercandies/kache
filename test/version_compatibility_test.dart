@@ -42,10 +42,10 @@ const _publishedFlutterConstraints = <String, String>{
 };
 
 void main() {
-  test('workspace package versions are aligned for the patch release', () {
+  test('workspace package versions are aligned for the minor release', () {
     for (final path in _workspacePackagePaths) {
       final pubspec = _pubspec(path);
-      expect(pubspec['version'], '1.0.1', reason: path);
+      expect(pubspec['version'], '1.1.0', reason: path);
     }
   });
 
@@ -123,6 +123,7 @@ void main() {
 
     _expectDependency('.', 'lints', '^6.1.0', dev: true);
     _expectDependency('.', 'melos', '8.2.2', dev: true);
+    _expectDependency('.', 'hive_ce', '^2.19.3', dev: true);
     _expectDependency('.', 'xml', '^7.0.1', dev: true);
 
     for (final dependency in const <String>[
@@ -134,11 +135,11 @@ void main() {
       'kache_provider',
       'kache_riverpod',
     ]) {
-      _expectDependency('.', dependency, '^1.0.1', dev: true);
+      _expectDependency('.', dependency, '^1.1.0', dev: true);
     }
   });
 
-  test('every internal published dependency accepts the patch release', () {
+  test('every internal published dependency accepts the minor release', () {
     for (final entry in const <(String, String)>[
       ('packages/kache_flutter', 'kache'),
       ('packages/kache_hive_ce', 'kache'),
@@ -147,7 +148,7 @@ void main() {
       ('packages/kache_connectivity_plus', 'kache'),
       ('packages/kache_provider', 'kache_flutter'),
     ]) {
-      _expectDependency(entry.$1, entry.$2, '^1.0.1');
+      _expectDependency(entry.$1, entry.$2, '^1.1.0');
     }
   });
 
@@ -190,11 +191,11 @@ void main() {
     }
   });
 
-  test('every published changelog starts with the patch release', () {
+  test('every published changelog starts with the minor release', () {
     for (final path in _packagePaths) {
       expect(
         File('$path/CHANGELOG.md').readAsStringSync(),
-        startsWith('## 1.0.1\n'),
+        startsWith('## 1.1.0\n'),
         reason: path,
       );
     }

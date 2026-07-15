@@ -38,12 +38,17 @@ void main() {
       expect(document, contains('flutter pub add kache_flutter'));
       expect(document, contains('KacheQuery<Profile>.memory'));
       expect(document, contains('KacheScopeOwnership.owned'));
+      expect(document, contains('snapshot.when('));
+      expect(document, contains('refreshError:'));
       expect(document, contains('snapshot.isRefreshing'));
-      expect(document, contains('snapshot.hasFailure'));
       expect(document, isNot(contains('resource.stream.listen')));
     }
     expect(english, contains('## Dart-only'));
     expect(chinese, contains('## 纯 Dart 使用'));
+    expect(
+      File('packages/kache/README.md').readAsStringSync(),
+      contains('refreshError:'),
+    );
     for (final heading in const <String>[
       '## Packages',
       '## Quick start',
@@ -66,6 +71,17 @@ void main() {
     ]) {
       expect(chinese, contains(heading));
     }
+  });
+
+  test('integration documentation covers the shortest typed APIs', () {
+    final hive = File('packages/kache_hive_ce/README.md').readAsStringSync();
+    final riverpod = File(
+      'packages/kache_riverpod/README.md',
+    ).readAsStringSync();
+
+    expect(hive, contains('bindAdapter<User>'));
+    expect(hive, contains('Hive.registerAdapter<User>'));
+    expect(riverpod, contains('({String text, int page})'));
   });
 
   test('documented examples analyze as real workspace clients', () async {

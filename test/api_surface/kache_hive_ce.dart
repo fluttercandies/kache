@@ -4,6 +4,7 @@ void verifyHiveCeTypes({
   required HiveCeKacheStore store,
   required HiveCeBoxOwnership ownership,
   required HiveCeBinding<int> binding,
+  required HiveCeAdapterBinding<int> adapterBinding,
   required HiveCeCodec<int> codec,
 }) {}
 

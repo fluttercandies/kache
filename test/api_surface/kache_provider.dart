@@ -11,3 +11,7 @@ KacheController<int> verifyReadExtension(BuildContext context) =>
 
 KacheSnapshot<int> verifyWatchExtension(BuildContext context) =>
     context.watchKache<int>();
+
+Future<KacheSnapshot<int>> verifyProviderControllerRefresh(
+  KacheController<int> controller,
+) => controller.refresh();

@@ -91,8 +91,19 @@ extension _KacheClientNetwork on KacheClient {
       try {
         await persistence!.close();
       } on Object catch (error, stackTrace) {
-        firstError = error;
-        firstStackTrace = stackTrace;
+        final details = _normalizePersistenceError(
+          error: error,
+          stackTrace: stackTrace,
+          expectedOperation: KachePersistenceOperation.close,
+          fallbackStage: KachePersistenceStage.backend,
+        );
+        firstError = KachePersistenceException(
+          operation: KachePersistenceOperation.close,
+          stage: details.stage,
+          cause: details.cause,
+          stackTrace: details.stackTrace,
+        );
+        firstStackTrace = details.stackTrace;
       }
     }
     if (networkOwnership == KacheNetworkOwnership.owned) {

@@ -45,11 +45,15 @@ Future<void> observeUser(UserApi api, String userId) async {
       fetch: (_) => api.fetchUser(userId),
     ),
   );
-  final subscription = cubit.stream.listen((snapshot) {
-    if (snapshot.hasData) {
-      print(snapshot.requireData.name);
-    }
-  });
+  final subscription = cubit.stream.listen(
+    (snapshot) => snapshot.when<void>(
+      idle: () {},
+      loading: () => print('Loading user'),
+      ready: (user) => print(user.name),
+      refreshError: (user, _) => print('${user.name} (refresh failed)'),
+      failed: (_) => print('Could not load user'),
+    ),
+  );
 
   try {
     await cubit.load();
@@ -67,6 +71,11 @@ Future<void> observeUser(UserApi api, String userId) async {
 include `load`, `refresh`, `setData`, `updateData`, `invalidate`, and `remove`.
 Closing the Cubit cancels its subscription and releases the resource, but never
 closes the supplied client.
+
+The `refresh` command returns `Future<KacheSnapshot<T>>`, so callers can inspect
+the completed state. Render with `snapshot.when` to keep idle and retained-data
+refresh failures explicit; the Bloc adapter does not create a second async
+state model.
 
 Set `refreshInterval` on the query policy while the Cubit is active. Pure Dart
 client owners can pause and resume those timers with `pausePolling()` and

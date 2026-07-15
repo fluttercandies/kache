@@ -36,23 +36,21 @@ extension _KacheEntrySnapshotExtensions<T> on _KacheEntry<T> {
     required KacheFailureKind kind,
     required Object error,
     required StackTrace stackTrace,
+    required KachePersistenceOperation expectedOperation,
     required KachePersistenceStage fallbackStage,
   }) {
-    if (error case final KachePersistenceException persistenceError) {
-      return KacheFailure(
-        kind: kind,
-        key: key,
-        cause: persistenceError.cause,
-        stackTrace: persistenceError.stackTrace,
-        persistenceStage: persistenceError.stage,
-      );
-    }
+    final details = _normalizePersistenceError(
+      error: error,
+      stackTrace: stackTrace,
+      expectedOperation: expectedOperation,
+      fallbackStage: fallbackStage,
+    );
     return KacheFailure(
       kind: kind,
       key: key,
-      cause: error,
-      stackTrace: stackTrace,
-      persistenceStage: fallbackStage,
+      cause: details.cause,
+      stackTrace: details.stackTrace,
+      persistenceStage: details.stage,
     );
   }
 

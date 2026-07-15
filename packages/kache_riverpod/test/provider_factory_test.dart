@@ -43,6 +43,46 @@ void main() {
     );
   });
 
+  test('auto-dispose family accepts a named record argument', () async {
+    final client = KacheClient();
+    final family = kacheProvider.autoDispose
+        .family<String, ({String text, int page})>(
+          client: (ref) => client,
+          query:
+              (ref, args) => KacheQuery.memory(
+                key: KacheKey('search', <Object?>[args.text, args.page]),
+                fetch: (context) async => '${args.text}:${args.page}',
+              ),
+        );
+    final container = ProviderContainer();
+    final first = container.listen(
+      family((text: 'flutter', page: 1)),
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    final second = container.listen(
+      family((text: 'flutter', page: 2)),
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    addTearDown(() async {
+      first.close();
+      second.close();
+      container.dispose();
+      await client.close();
+    });
+
+    await pumpEventQueue();
+    await container.pump();
+
+    expect(first.read().requireData, 'flutter:1');
+    expect(second.read().requireData, 'flutter:2');
+    expect(
+      family((text: 'flutter', page: 1)),
+      family((text: 'flutter', page: 1)),
+    );
+  });
+
   test('ref dependencies rebuild the notifier with a new query', () async {
     final client = KacheClient();
     final parameterProvider = NotifierProvider<_ParameterNotifier, int>(

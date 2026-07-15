@@ -8,3 +8,10 @@ void verifyBlocTypes({
 KacheBlocSnapshotListener<int> verifyBlocListener(
   KacheBlocSnapshotListener<int> listener,
 ) => listener;
+
+Future<KacheSnapshot<int>> verifyCubitRefresh(KacheCubit<int> cubit) =>
+    cubit.refresh();
+
+Future<KacheSnapshot<int>> verifyBindingRefresh(
+  KacheBlocBinding<int> binding,
+) => binding.refresh();

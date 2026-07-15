@@ -187,52 +187,52 @@ final class _RepositoryDashboardState extends State<RepositoryDashboard> {
   Widget _buildBody(
     BuildContext context,
     KacheSnapshot<RepositoryProfile> snapshot,
-  ) {
-    if (snapshot.hasData) {
-      return _RepositoryBody(
-        key: ValueKey<int>(snapshot.revision),
-        profile: snapshot.requireData,
-        snapshot: snapshot,
-        showNetworkImage: widget.showNetworkImage,
-      );
-    }
-    if (snapshot.isFailed) {
-      return _EmptyState(
-        key: const ValueKey<String>('failure'),
-        icon: Icons.cloud_off_rounded,
-        title: 'Repository unavailable',
-        message: 'Check the connection and retry.',
-        actionLabel: 'Retry refresh',
-        onAction: _commandActive
-            ? null
-            : () => _runCommand(
-                widget.onRefresh,
-                successMessage: 'Repository refreshed',
-              ),
-      );
-    }
-    if (snapshot.phase == KachePhase.idle) {
-      return _EmptyState(
-        key: const ValueKey<String>('idle'),
-        icon: Icons.inventory_2_outlined,
-        title: 'No cached repository',
-        message: 'Refresh to load the current repository state.',
-        actionLabel: 'Load repository',
-        onAction: _commandActive
-            ? null
-            : () => _runCommand(
-                widget.onRefresh,
-                successMessage: 'Repository refreshed',
-              ),
-      );
-    }
-    return const _EmptyState(
+  ) => snapshot.when(
+    idle: () => _EmptyState(
+      key: const ValueKey<String>('idle'),
+      icon: Icons.inventory_2_outlined,
+      title: 'No cached repository',
+      message: 'Refresh to load the current repository state.',
+      actionLabel: 'Load repository',
+      onAction: _commandActive
+          ? null
+          : () => _runCommand(
+              widget.onRefresh,
+              successMessage: 'Repository refreshed',
+            ),
+    ),
+    loading: () => const _EmptyState(
       key: ValueKey<String>('loading'),
       icon: Icons.downloading_rounded,
       title: 'Loading repository',
       message: 'Checking memory, disk cache, and GitHub.',
-    );
-  }
+    ),
+    failed: (_) => _EmptyState(
+      key: const ValueKey<String>('failure'),
+      icon: Icons.cloud_off_rounded,
+      title: 'Repository unavailable',
+      message: 'Check the connection and retry.',
+      actionLabel: 'Retry refresh',
+      onAction: _commandActive
+          ? null
+          : () => _runCommand(
+              widget.onRefresh,
+              successMessage: 'Repository refreshed',
+            ),
+    ),
+    ready: (profile) => _RepositoryBody(
+      key: ValueKey<int>(snapshot.revision),
+      profile: profile,
+      snapshot: snapshot,
+      showNetworkImage: widget.showNetworkImage,
+    ),
+    refreshError: (profile, _) => _RepositoryBody(
+      key: ValueKey<int>(snapshot.revision),
+      profile: profile,
+      snapshot: snapshot,
+      showNetworkImage: widget.showNetworkImage,
+    ),
+  );
 
   Future<void> _runCommand(
     RepositoryCommand command, {

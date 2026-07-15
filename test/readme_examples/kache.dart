@@ -16,7 +16,7 @@ abstract interface class UserApi {
 Future<void> showUser({
   required UserApi api,
   required String userId,
-  required void Function(KacheSnapshot<User>) render,
+  required void Function(String) render,
 }) async {
   final client = KacheClient();
   final query = KacheQuery<User>.memory(
@@ -28,7 +28,17 @@ Future<void> showUser({
     policy: KachePolicy.staleWhileRevalidate(),
   );
   final resource = client.watch(query);
-  final subscription = resource.stream.listen(render);
+  final subscription = resource.stream.listen(
+    (snapshot) => render(
+      snapshot.when(
+        idle: () => 'Idle',
+        loading: () => 'Loading',
+        ready: (user) => user.name,
+        refreshError: (user, _) => '${user.name} (refresh failed)',
+        failed: (_) => 'Could not load user',
+      ),
+    ),
+  );
 
   try {
     await resource.load();

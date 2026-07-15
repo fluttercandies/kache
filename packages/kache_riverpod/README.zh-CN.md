@@ -34,7 +34,7 @@ final class User {
 }
 
 abstract interface class UserApi {
-  Future<User> fetchUser(String id);
+  Future<User> searchUser(String text, int page);
 }
 
 final class UserProviders {
@@ -43,27 +43,29 @@ final class UserProviders {
   final KacheClient client;
   final UserApi api;
 
-  late final user = kacheProvider.autoDispose.family<User, String>(
-    client: (_) => client,
-    query: (_, userId) => KacheQuery<User>.memory(
-      key: KacheKey('users', <Object?>[userId]),
-      fetch: (_) => api.fetchUser(userId),
-    ),
-  );
+  late final search = kacheProvider.autoDispose
+      .family<User, ({String text, int page})>(
+        client: (_) => client,
+        query: (_, args) => KacheQuery<User>.memory(
+          key: KacheKey('search', <Object?>[args.text, args.page]),
+          fetch: (_) => api.searchUser(args.text, args.page),
+        ),
+      );
 }
 
-Future<void> observeUser(UserApi api, String userId) async {
+Future<void> observeUser(UserApi api, String text, int page) async {
   final client = KacheClient();
   final providers = UserProviders(client: client, api: api);
   final container = ProviderContainer();
+  final provider = providers.search((text: text, page: page));
   final subscription = container.listen(
-    providers.user(userId),
+    provider,
     (previous, next) {},
     fireImmediately: true,
   );
 
   try {
-    await container.read(providers.user(userId).notifier).refresh();
+    await container.read(provider.notifier).refresh();
   } finally {
     subscription.close();
     container.dispose();
@@ -75,13 +77,17 @@ Future<void> observeUser(UserApi api, String userId) async {
 ## Provider builder
 
 - `kacheProvider<T>` 创建普通 notifier provider。
-- `kacheProvider.family<T, Arg>` 把 Riverpod family 参数传给 query 构造；同一参数也必须
-  放入 `KacheKey`。
+- `kacheProvider.family<T, Arg>` 把 Riverpod family 参数传给 query 构造；多参数使用
+  named record，并把每个字段都放入 `KacheKey`。
 - `kacheProvider.autoDispose<T>` 在 Riverpod dispose 后释放 resource。
 - `kacheProvider.autoDispose.family<T, Arg>` 组合两者。
 
 client 与 query callback 都接收 `Ref`，可以 watch 普通 Riverpod 依赖。provider 拥有
 一个 resource handle，但不会关闭 client。
+
+Provider 直接暴露 `KacheSnapshot<T>`。使用 `snapshot.when` 渲染，确保 idle 和保留旧
+数据的刷新失败都有显式分支。Kache 不转换为 `AsyncValue`，因为转换会丢失 freshness、
+source、persistence，以及“缓存正在刷新”和“缓存伴随错误”的差异。
 
 ## 命令与生命周期
 

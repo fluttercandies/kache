@@ -35,7 +35,7 @@ final class User {
 }
 
 abstract interface class UserApi {
-  Future<User> fetchUser(String id);
+  Future<User> searchUser(String text, int page);
 }
 
 final class UserProviders {
@@ -44,27 +44,29 @@ final class UserProviders {
   final KacheClient client;
   final UserApi api;
 
-  late final user = kacheProvider.autoDispose.family<User, String>(
-    client: (_) => client,
-    query: (_, userId) => KacheQuery<User>.memory(
-      key: KacheKey('users', <Object?>[userId]),
-      fetch: (_) => api.fetchUser(userId),
-    ),
-  );
+  late final search = kacheProvider.autoDispose
+      .family<User, ({String text, int page})>(
+        client: (_) => client,
+        query: (_, args) => KacheQuery<User>.memory(
+          key: KacheKey('search', <Object?>[args.text, args.page]),
+          fetch: (_) => api.searchUser(args.text, args.page),
+        ),
+      );
 }
 
-Future<void> observeUser(UserApi api, String userId) async {
+Future<void> observeUser(UserApi api, String text, int page) async {
   final client = KacheClient();
   final providers = UserProviders(client: client, api: api);
   final container = ProviderContainer();
+  final provider = providers.search((text: text, page: page));
   final subscription = container.listen(
-    providers.user(userId),
+    provider,
     (previous, next) {},
     fireImmediately: true,
   );
 
   try {
-    await container.read(providers.user(userId).notifier).refresh();
+    await container.read(provider.notifier).refresh();
   } finally {
     subscription.close();
     container.dispose();
@@ -77,13 +79,20 @@ Future<void> observeUser(UserApi api, String userId) async {
 
 - `kacheProvider<T>` creates a regular notifier provider.
 - `kacheProvider.family<T, Arg>` puts a Riverpod family argument into query
-  construction. Put the same argument in `KacheKey`.
+  construction. Use a named record for multiple parameters and put every field
+  in `KacheKey`.
 - `kacheProvider.autoDispose<T>` releases its resource after Riverpod disposes
   the provider.
 - `kacheProvider.autoDispose.family<T, Arg>` combines both behaviors.
 
 Client and query callbacks receive `Ref`, so they can watch normal Riverpod
 dependencies. A provider owns one resource handle and never closes its client.
+
+Providers expose `KacheSnapshot<T>` directly. Render with `snapshot.when` so
+idle and retained-data refresh failures stay explicit. Kache deliberately does
+not convert to `AsyncValue`: that would lose freshness, source, persistence,
+and the distinction between cached data refreshing and cached data with an
+error.
 
 ## Commands and lifecycle
 

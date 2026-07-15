@@ -47,25 +47,31 @@ Widget createUserView({
     client: client,
     query: query,
     child: KacheConsumer<User>(
-      builder: (context, snapshot, controller, child) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return ListTile(
-          title: Text(snapshot.requireData.name),
-          subtitle: snapshot.failure == null
-              ? null
-              : const Text('Showing cached data'),
-          trailing: IconButton(
-            tooltip: 'Refresh user',
-            onPressed: controller.refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-        );
-      },
+      builder: (context, snapshot, controller, child) => snapshot.when(
+        idle: () => const SizedBox.shrink(),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        failed: (_) => const Center(child: Text('Could not load user')),
+        ready: (user) => _userTile(user, controller),
+        refreshError: (user, _) =>
+            _userTile(user, controller, refreshFailed: true),
+      ),
     ),
   );
 }
+
+Widget _userTile(
+  User user,
+  KacheController<User> controller, {
+  bool refreshFailed = false,
+}) => ListTile(
+  title: Text(user.name),
+  subtitle: refreshFailed ? const Text('Showing cached data') : null,
+  trailing: IconButton(
+    tooltip: 'Refresh user',
+    onPressed: controller.refresh,
+    icon: const Icon(Icons.refresh),
+  ),
+);
 ```
 
 ## Provider 组件
@@ -76,6 +82,9 @@ Widget createUserView({
 
 `KacheConsumer<T>` 根据当前快照重建，并提供 controller 执行命令。它支持普通
 Provider consumer 的静态 `child` 语义。
+
+使用 `snapshot.when` 完整处理 idle/loading/data/error。controller 的 `refresh` 返回
+`Future<KacheSnapshot<T>>`；Provider 只负责核心 resource 生命周期适配，不复制状态机。
 
 不订阅地执行命令使用 `context.readKache<T>()`；根据最近快照重建使用
 `context.watchKache<T>()`。
