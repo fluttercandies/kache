@@ -88,9 +88,10 @@ Future<UserCache> openUserCache(UserApi api, String userId) async {
 `bindAdapter<T>(adapter)` requires that the adapter type id is already
 registered on the same `HiveInterface` used to open the box. Kache does not
 register or own adapters. Projects using Hive CE code generation can pass the
-generated adapter after their normal `Hive.registerAdapters()` call. Native
-records support nullable cached values and are isolated from byte-codec
-records, so one mode can never reinterpret the other.
+generated adapter after their normal `Hive.registerAdapters()` call. The full
+Hive CE external type id range `0..65439`, including extended ids above 223,
+is supported. Native records support nullable cached values and are isolated
+from byte-codec records, so one mode can never reinterpret the other.
 
 Use `bind(codecId:, schema:, codec:, migrate:)` when the cache payload needs an
 independent byte format. `codecId` identifies that model format and must remain

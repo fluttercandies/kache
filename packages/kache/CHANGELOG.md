@@ -1,3 +1,8 @@
+## 1.2.0
+
+- Aligned the core release with the new Flutter Hooks integration packages.
+- Kept the core API and zero-third-party runtime dependency unchanged.
+
 ## 1.1.0
 
 - Added exhaustive `when`, partial `maybeWhen`, and metadata-preserving

@@ -105,13 +105,10 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
 }
 
 void _validateAdapterTypeId(int typeId) {
-  if (typeId < 0 || typeId > 223) {
-    throw ArgumentError.value(
-      typeId,
-      'adapter.typeId',
-      'Must be an external Hive CE type id from 0 through 223.',
-    );
-  }
+  HiveCeAdapterEnvelope.validateTypeId(
+    typeId,
+    argumentName: 'adapter.typeId',
+  );
 }
 
 void _validateBoxOwner(HiveInterface hive, Box<Object?> box) {

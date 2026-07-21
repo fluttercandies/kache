@@ -1,8 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:kache_example_support/kache_example_support.dart';
-import 'package:kache_flutter/kache_flutter.dart';
+import 'package:kache_flutter_hooks/kache_flutter_hooks.dart';
 
 void main() {
   runApp(const KacheFlutterExampleApp());
@@ -25,16 +26,9 @@ class KacheFlutterExampleApp extends StatelessWidget {
     runtimeFactory: runtimeFactory,
     builder: (context, runtime) => KachePlayground(
       adapterName: 'Flutter',
-      repository: (context) => KacheBuilder<RepositoryProfile>(
-        query: runtime.query,
-        builder: (context, snapshot, controller) => RepositoryDashboard(
-          adapterName: 'Flutter',
-          snapshot: snapshot,
-          onRefresh: controller.refresh,
-          onClear: controller.remove,
-          showNetworkImage: showNetworkImage,
-          compact: true,
-        ),
+      repository: (context) => _FlutterRepository(
+        runtime: runtime,
+        showNetworkImage: showNetworkImage,
       ),
       slots: PlaygroundSlots(
         persistence: (context) => PersistencePlaygroundHost(
@@ -53,6 +47,29 @@ class KacheFlutterExampleApp extends StatelessWidget {
       ),
     ),
   );
+}
+
+final class _FlutterRepository extends HookWidget {
+  const _FlutterRepository({
+    required this.runtime,
+    required this.showNetworkImage,
+  });
+
+  final ExampleRuntime runtime;
+  final bool showNetworkImage;
+
+  @override
+  Widget build(BuildContext context) {
+    final cache = useKache(runtime.query);
+    return RepositoryDashboard(
+      adapterName: 'Flutter Hooks',
+      snapshot: cache.snapshot,
+      onRefresh: cache.refresh,
+      onClear: cache.remove,
+      showNetworkImage: showNetworkImage,
+      compact: true,
+    );
+  }
 }
 
 /// Demonstrates [KacheBuilder] + [KacheController] commands + [KacheListener]

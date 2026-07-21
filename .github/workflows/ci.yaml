@@ -29,6 +29,8 @@ jobs:
             profile: flutter-3.24
           - flutter: "3.29.3"
             profile: dart-3.7
+          - flutter: "3.32.8"
+            profile: flutter-3.32
     env:
       CI: true
     steps:
@@ -89,6 +91,7 @@ jobs:
           melos run test:hive
           melos run test:connectivity
           melos run test:riverpod
+          melos run test:hooks
           melos run test:bloc
 
       - name: Run failure, lifecycle, adapter, and example tests

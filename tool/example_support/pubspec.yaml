@@ -1,6 +1,6 @@
 name: kache_example_support
 description: Shared non-published runtime and UI for the Kache example apps.
-version: 1.1.0
+version: 1.2.0
 publish_to: none
 
 environment:
@@ -14,10 +14,10 @@ dependencies:
     sdk: flutter
   hive_ce_flutter: 2.3.4
   http: 1.6.0
-  kache: ^1.1.0
-  kache_connectivity_plus: ^1.1.0
-  kache_flutter: ^1.1.0
-  kache_hive_ce: ^1.1.0
+  kache: ^1.2.0
+  kache_connectivity_plus: ^1.2.0
+  kache_flutter: ^1.2.0
+  kache_hive_ce: ^1.2.0
 
 dev_dependencies:
   flutter_test:

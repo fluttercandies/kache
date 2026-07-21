@@ -135,6 +135,67 @@ void main() {
     );
     expect(fetchCounts, <int, int>{1: 1, 2: 1});
   });
+
+  test('commands never re-enter build and dependencies rebuild once', () async {
+    final client = KacheClient();
+    final parameterProvider = NotifierProvider<_ParameterNotifier, int>(
+      _ParameterNotifier.new,
+    );
+    var builds = 0;
+    var fetches = 0;
+    final provider = kacheProvider<int>(
+      client: (_) => client,
+      query: (ref) {
+        builds += 1;
+        final parameter = ref.watch(parameterProvider);
+        return KacheQuery<int>.memory(
+          key: KacheKey('riverpod-build-cycle', <Object?>[parameter]),
+          fetch: (_) async {
+            fetches += 1;
+            return parameter;
+          },
+        );
+      },
+      dependencies: <ProviderOrFamily>[parameterProvider],
+    );
+    final container = ProviderContainer();
+    final subscription = container.listen(
+      provider,
+      (previous, next) {},
+      fireImmediately: true,
+    );
+    addTearDown(() async {
+      subscription.close();
+      container.dispose();
+      await client.close();
+    });
+    await pumpEventQueue();
+    await container.pump();
+
+    final notifier = container.read(provider.notifier);
+    final firstResource = notifier.resource;
+    expect((builds, fetches), (1, 1));
+
+    await notifier.setData(10);
+    await container.pump();
+    expect((builds, fetches), (1, 1));
+    expect(notifier.resource, same(firstResource));
+
+    await notifier.refresh();
+    await container.pump();
+    expect((builds, fetches), (1, 2));
+    expect(notifier.resource, same(firstResource));
+
+    container.read(parameterProvider.notifier).setValue(2);
+    await container.pump();
+    await pumpEventQueue();
+    await container.pump();
+
+    expect((builds, fetches), (2, 3));
+    expect(container.read(provider.notifier), same(notifier));
+    expect(notifier.resource, isNot(same(firstResource)));
+    expect(subscription.read().requireData, 2);
+  });
 }
 
 final class _ParameterNotifier extends Notifier<int> {

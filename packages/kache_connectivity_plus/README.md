@@ -94,12 +94,12 @@ lost while the UI is in the background.
 | --- | --- |
 | Dart | Dart >=3.5.0 <4.0.0 |
 | Flutter | Flutter >=3.24.0 |
-| connectivity_plus | `>=7.2.0 <8.0.0` |
+| connectivity_plus | `>=7.3.0 <8.0.0` |
 | Android | minSdk 21, Java 17, AGP >=8.12.1, Gradle >=8.13, Kotlin 2.2.0 |
 | Apple | iOS >=12.0, macOS >=10.14, Xcode >=26.1.1 |
 
 Android, iOS, macOS, Linux, Windows, and Web are supported through
-connectivity_plus 7.2.0. Connectivity reports an available network interface,
+connectivity_plus 7.3.0. Connectivity reports an available network interface,
 not verified Internet reachability. Existing Android projects must satisfy the
 native build-tool requirements above even when their Flutter SDK constraint
 resolves successfully.

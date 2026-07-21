@@ -1,0 +1,27 @@
+name: kache_flutter_hooks
+description: Flutter Hooks lifecycle integration for the Kache caching library.
+version: 1.2.0
+homepage: https://github.com/fluttercandies/kache
+repository: https://github.com/fluttercandies/kache/tree/main/packages/kache_flutter_hooks
+issue_tracker: https://github.com/fluttercandies/kache/issues
+topics:
+  - cache
+  - hooks
+  - flutter
+  - offline-first
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.32.0"
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_hooks: ^0.21.3+1
+  kache_flutter: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

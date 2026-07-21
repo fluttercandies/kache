@@ -1,6 +1,6 @@
 name: kache
 description: Type-safe stale-while-revalidate caching primitives for Dart applications.
-version: 1.1.0
+version: 1.2.0
 homepage: https://github.com/fluttercandies/kache
 repository: https://github.com/fluttercandies/kache/tree/main/packages/kache
 issue_tracker: https://github.com/fluttercandies/kache/issues

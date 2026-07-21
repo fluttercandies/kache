@@ -1,6 +1,6 @@
 name: kache_riverpod
 description: Riverpod state management integration for the Kache caching library.
-version: 1.1.0
+version: 1.2.0
 homepage: https://github.com/fluttercandies/kache
 repository: https://github.com/fluttercandies/kache/tree/main/packages/kache_riverpod
 issue_tracker: https://github.com/fluttercandies/kache/issues
@@ -16,7 +16,7 @@ environment:
 resolution: workspace
 
 dependencies:
-  kache: ^1.1.0
+  kache: ^1.2.0
   riverpod: ^3.3.2
 
 dev_dependencies:

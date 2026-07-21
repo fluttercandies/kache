@@ -86,8 +86,9 @@ Future<UserCache> openUserCache(UserApi api, String userId) async {
 
 `bindAdapter<T>(adapter)` 要求 adapter type id 已注册到打开该 box 的同一个
 `HiveInterface`。Kache 不会注册或持有 adapter。使用 Hive CE codegen 的项目在正常
-调用 `Hive.registerAdapters()` 后传入生成的 adapter 即可。native record 支持缓存
-nullable 值，并且与 byte-codec record 严格隔离，两种模式不会互相误读。
+调用 `Hive.registerAdapters()` 后传入生成的 adapter 即可。完整支持 Hive CE 外部
+type id 范围 `0..65439`，包括 223 以上的扩展 id。native record 支持缓存 nullable
+值，并且与 byte-codec record 严格隔离，两种模式不会互相误读。
 
 缓存 payload 需要独立 byte 格式时，使用
 `bind(codecId:, schema:, codec:, migrate:)`。`codecId` 标识模型格式，发布后应保持

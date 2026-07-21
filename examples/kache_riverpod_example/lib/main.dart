@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kache_example_support/kache_example_support.dart';
-import 'package:kache_riverpod/kache_riverpod.dart';
+import 'package:kache_hooks_riverpod/kache_hooks_riverpod.dart';
 
 void main() {
   runApp(const ProviderScope(child: KacheRiverpodExampleApp()));
@@ -11,18 +11,20 @@ void main() {
 
 final _runtimeProvider = Provider<ExampleRuntime>((ref) {
   throw StateError('ExampleRuntime must be overridden by the application.');
-});
+}, dependencies: const []);
 
 // Repository tab: a plain kacheProvider over the SWR query.
 final _repositoryProvider = kacheProvider<RepositoryProfile>(
   client: (ref) => ref.watch(_runtimeProvider).client,
   query: (ref) => ref.watch(_runtimeProvider).query,
+  dependencies: [_runtimeProvider],
 );
 
 // Commands tab: another handle on the same shared SWR query.
 final _commandsProvider = kacheProvider<RepositoryProfile>(
   client: (ref) => ref.watch(_runtimeProvider).client,
   query: (ref) => ref.watch(_runtimeProvider).query,
+  dependencies: [_runtimeProvider],
 );
 
 // Policies tab: a family keyed by policy name, so one definition serves all
@@ -36,6 +38,7 @@ final _policyFamilyProvider = kacheProvider.family<RepositoryProfile, String>(
     'networkOnly' => ref.watch(_runtimeProvider).networkOnlyQuery,
     _ => ref.watch(_runtimeProvider).query,
   },
+  dependencies: [_runtimeProvider],
 );
 
 // Policies tab: an auto-dispose family with manual keep-alive, demonstrating
@@ -50,6 +53,7 @@ final _policyAutoDisposeProvider = kacheProvider.autoDispose
         'networkOnly' => ref.watch(_runtimeProvider).networkOnlyQuery,
         _ => ref.watch(_runtimeProvider).query,
       },
+      dependencies: [_runtimeProvider],
     );
 
 class KacheRiverpodExampleApp extends StatelessWidget {
@@ -82,20 +86,8 @@ class _RiverpodPlayground extends StatelessWidget {
   @override
   Widget build(BuildContext context) => KachePlayground(
     adapterName: 'Riverpod',
-    repository: (context) => Consumer(
-      builder: (context, ref, child) {
-        final snapshot = ref.watch(_repositoryProvider);
-        final notifier = ref.read(_repositoryProvider.notifier);
-        return RepositoryDashboard(
-          adapterName: 'Riverpod',
-          snapshot: snapshot,
-          onRefresh: notifier.refresh,
-          onClear: notifier.remove,
-          showNetworkImage: showNetworkImage,
-          compact: true,
-        );
-      },
-    ),
+    repository: (context) =>
+        _RiverpodRepository(showNetworkImage: showNetworkImage),
     slots: PlaygroundSlots(
       persistence: (context) => Consumer(
         builder: (context, ref, child) {
@@ -121,13 +113,32 @@ class _RiverpodPlayground extends StatelessWidget {
   );
 }
 
+final class _RiverpodRepository extends HookConsumerWidget {
+  const _RiverpodRepository({required this.showNetworkImage});
+
+  final bool showNetworkImage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cache = useKacheProvider(ref, _repositoryProvider);
+    return RepositoryDashboard(
+      adapterName: 'Riverpod Hooks',
+      snapshot: cache.snapshot,
+      onRefresh: cache.refresh,
+      onClear: cache.remove,
+      showNetworkImage: showNetworkImage,
+      compact: true,
+    );
+  }
+}
+
 final class _RiverpodCommandsTab extends ConsumerWidget {
   const _RiverpodCommandsTab();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(_commandsProvider);
-    final notifier = ref.read(_commandsProvider.notifier);
+    final notifier = ref.watch(_commandsProvider.notifier);
     return CommandPlayground(
       snapshot: snapshot,
       commands: PlaygroundCommandSet(
@@ -186,23 +197,22 @@ final class _RiverpodPoliciesTabState
   Widget build(BuildContext context) {
     return PolicyPlayground(
       cards: <PolicyCardModel>[
-        for (final (name, desc) in _policies)
-          PolicyCardModel(
-            name: name,
-            description: desc,
-            snapshot: ref.watch(_policyFamilyProvider(name)),
-            fetchCount:
-                _fetchCounts[ref
-                    .read(_policyFamilyProvider(name).notifier)
-                    .query
-                    .key
-                    .storageKey] ??
-                0,
-            onForceFetch: () =>
-                ref.read(_policyFamilyProvider(name).notifier).refresh(),
-          ),
+        for (final (name, desc) in _policies) _buildPolicyCard(name, desc),
       ],
       trailing: _AutoDisposeKeepAliveCard(),
+    );
+  }
+
+  PolicyCardModel _buildPolicyCard(String name, String description) {
+    final provider = _policyFamilyProvider(name);
+    final snapshot = ref.watch(provider);
+    final notifier = ref.watch(provider.notifier);
+    return PolicyCardModel(
+      name: name,
+      description: description,
+      snapshot: snapshot,
+      fetchCount: _fetchCounts[notifier.query.key.storageKey] ?? 0,
+      onForceFetch: notifier.refresh,
     );
   }
 }
@@ -220,7 +230,7 @@ final class _AutoDisposeKeepAliveCardState
   @override
   Widget build(BuildContext context) {
     final snapshot = ref.watch(_policyAutoDisposeProvider('SWR'));
-    final notifier = ref.read(_policyAutoDisposeProvider('SWR').notifier);
+    final notifier = ref.watch(_policyAutoDisposeProvider('SWR').notifier);
     final keptAlive = notifier.isKeptAlive;
     final theme = Theme.of(context);
     return Container(

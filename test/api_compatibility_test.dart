@@ -15,8 +15,12 @@ void main() {
     final expectedExports = <String, String>{
       'packages/kache_flutter/lib/kache_flutter.dart':
           "export 'package:kache/kache.dart';",
+      'packages/kache_flutter_hooks/lib/kache_flutter_hooks.dart':
+          "export 'package:kache_flutter/kache_flutter.dart';",
       'packages/kache_riverpod/lib/kache_riverpod.dart':
           "export 'package:kache/kache.dart';",
+      'packages/kache_hooks_riverpod/lib/kache_hooks_riverpod.dart':
+          "export 'package:kache_riverpod/kache_riverpod.dart';",
       'packages/kache_bloc/lib/kache_bloc.dart':
           "export 'package:kache/kache.dart';",
       'packages/kache_connectivity_plus/lib/kache_connectivity_plus.dart':

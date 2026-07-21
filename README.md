@@ -20,9 +20,11 @@ and state-management integrations are separate packages.
 | --- | --- | --- |
 | `kache` | Cache state machine, concurrency, policies, memory backend | Dart SDK only |
 | `kache_flutter` | Scope, controller, builder, listener, app lifecycle | Flutter + `kache` |
+| `kache_flutter_hooks` | `useKache` controller lifecycle binding | Flutter Hooks + `kache_flutter` |
 | `kache_hive_ce` | Hive CE TypeAdapter/native records, codecs, migrations | Hive CE + `kache` |
 | `kache_connectivity_plus` | Automatic reconnect revalidation | connectivity_plus + `kache` |
 | `kache_riverpod` | Provider/family/auto-dispose notifier integration | Riverpod + `kache` |
+| `kache_hooks_riverpod` | `useKacheProvider` for existing Kache providers | Hooks Riverpod + `kache_riverpod` |
 | `kache_bloc` | `KacheCubit` and composable binding | Bloc + `kache` |
 | `kache_provider` | Provider widgets and context helpers | Provider + `kache_flutter` |
 
@@ -119,6 +121,18 @@ Pure Dart applications can depend on the zero-third-party `kache` package and
 use its resource stream directly. See the
 [core quick start](packages/kache/README.md#quick-start) for ownership and
 cleanup.
+
+## Hooks
+
+Flutter Hooks users can add `kache_flutter_hooks` and write
+`final cache = useKache(query)`. The hook resolves `KacheScope`, returns the
+regular `KacheController`, rebuilds from `cache.snapshot`, and disposes the
+controller automatically.
+
+Hooks Riverpod users define a normal `kacheProvider`, then call
+`useKacheProvider(ref, provider)`. Riverpod remains the only resource owner, so
+families, overrides, auto-dispose, keep-alive, observers, and scopes retain
+their native behavior. Neither adapter adds another cache state model.
 
 ## Policy guide
 
@@ -217,20 +231,23 @@ inheriting the newer toolchain used by this monorepo.
 | --- | --- | --- |
 | `kache` | >=3.5.0 <4.0.0 | Not required |
 | `kache_flutter` | >=3.5.0 <4.0.0 | >=3.24.0 |
+| `kache_flutter_hooks` | >=3.8.0 <4.0.0 | >=3.32.0 |
 | `kache_hive_ce` | >=3.5.0 <4.0.0 | Not required |
 | `kache_riverpod` | >=3.7.0 <4.0.0 | Not required |
+| `kache_hooks_riverpod` | >=3.8.0 <4.0.0 | >=3.32.0 |
 | `kache_bloc` | >=3.5.0 <4.0.0 | Not required |
 | `kache_connectivity_plus` | >=3.5.0 <4.0.0 | >=3.24.0 |
 | `kache_provider` | >=3.5.0 <4.0.0 | >=3.24.0 |
 
 Official adapters track Hive CE `>=2.19.3 <3.0.0`, connectivity_plus
-`>=7.2.0 <8.0.0`, Riverpod `>=3.3.2 <4.0.0`, Bloc
+`>=7.3.0 <8.0.0`, Riverpod `>=3.3.2 <4.0.0`, Flutter Hooks
+`>=0.21.3+1 <0.22.0`, Hooks Riverpod `>=3.3.2 <4.0.0`, Bloc
 `>=9.2.1 <10.0.0`, and Provider `>=6.1.5+1 <7.0.0`.
 
 ## Examples
 
-The `examples/` directory contains runnable Flutter, Riverpod, Bloc/Cubit, and
-Provider applications. Each uses the GitHub repository API and Hive CE to
+The `examples/` directory contains runnable Flutter Hooks, Hooks Riverpod,
+Bloc/Cubit, and Provider applications. Each uses the GitHub repository API and Hive CE to
 demonstrate cold loading, disk-cache-first restart, refresh, reconnect
 revalidation, retained data on failure, and explicit cache clearing.
 

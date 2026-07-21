@@ -94,6 +94,9 @@ query。
 - `KacheListener<T>` 执行副作用，不重建 child。
 - `KacheController<T>` 实现 `ValueListenable<KacheSnapshot<T>>`，并暴露所有资源命令。
 
+`HookWidget` 使用独立的 `kache_flutter_hooks` 包。它的 `useKache(query)` 返回同一个
+controller 类型，不增加第二套状态模型。
+
 Widget 收到相同 key 的新 query 时，controller 只更新 handle 的 fetcher 和 policy，不会
 丢失共享数据；key 改变时会释放旧 handle 并绑定新资源。
 

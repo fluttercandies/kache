@@ -1,3 +1,8 @@
+## 1.2.0
+
+- Updated connectivity_plus to 7.3.0.
+- Updated the Kache core compatibility range for the coordinated 1.2 release.
+
 ## 1.1.0
 
 - Updated the core dependency for the new snapshot rendering and hardened

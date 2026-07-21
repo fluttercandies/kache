@@ -6,7 +6,11 @@ const _documents = <String, String>{
   '.': 'test/readme_examples/kache_flutter.dart',
   'packages/kache': 'test/readme_examples/kache.dart',
   'packages/kache_flutter': 'test/readme_examples/kache_flutter.dart',
+  'packages/kache_flutter_hooks':
+      'test/readme_examples/kache_flutter_hooks.dart',
   'packages/kache_hive_ce': 'test/readme_examples/kache_hive_ce.dart',
+  'packages/kache_hooks_riverpod':
+      'test/readme_examples/kache_hooks_riverpod.dart',
   'packages/kache_riverpod': 'test/readme_examples/kache_riverpod.dart',
   'packages/kache_bloc': 'test/readme_examples/kache_bloc.dart',
   'packages/kache_connectivity_plus':
@@ -82,6 +86,15 @@ void main() {
     expect(hive, contains('bindAdapter<User>'));
     expect(hive, contains('Hive.registerAdapter<User>'));
     expect(riverpod, contains('({String text, int page})'));
+    expect(riverpod, contains('`overrideWithBuild`'));
+    expect(
+      File('packages/kache_flutter_hooks/README.md').readAsStringSync(),
+      contains('final cache = useKache(query);'),
+    );
+    expect(
+      File('packages/kache_hooks_riverpod/README.md').readAsStringSync(),
+      contains('useKacheProvider(ref, profileProvider)'),
+    );
   });
 
   test('documented examples analyze as real workspace clients', () async {

@@ -3,7 +3,9 @@ name: kache
 packages:
   - packages/kache
   - packages/kache_flutter
+  - packages/kache_flutter_hooks
   - packages/kache_hive_ce
+  - packages/kache_hooks_riverpod
   - packages/kache_riverpod
   - packages/kache_bloc
   - packages/kache_connectivity_plus
@@ -34,6 +36,9 @@ scripts:
   test:riverpod:
     description: Run the Riverpod adapter test suite.
     run: melos exec --scope=kache_riverpod -- dart test
+  test:hooks:
+    description: Run both Flutter Hooks adapter test suites.
+    run: melos exec --scope=kache_flutter_hooks -- flutter test && melos exec --scope=kache_hooks_riverpod -- flutter test
   test:bloc:
     description: Run the Bloc adapter test suite.
     run: melos exec --scope=kache_bloc -- dart test

@@ -7,23 +7,28 @@ import 'notifier.dart';
 /// Riverpod-style builder for Kache notifier providers.
 const kacheProvider = KacheProviderBuilder();
 
+/// A Riverpod provider exposing a Kache snapshot and notifier.
+typedef KacheProvider<T> = NotifierProvider<KacheNotifier<T>, KacheSnapshot<T>>;
+
+/// A parameterized family of Kache providers.
+typedef KacheProviderFamily<T, Arg> =
+    NotifierProviderFamily<KacheNotifier<T>, KacheSnapshot<T>, Arg>;
+
 /// Creates regular Kache [NotifierProvider] instances.
 final class KacheProviderBuilder {
   /// Creates the provider builder.
   const KacheProviderBuilder();
 
   /// Creates a provider that owns one resource handle, not the client.
-  NotifierProvider<KacheNotifier<T>, KacheSnapshot<T>> call<T>({
+  KacheProvider<T> call<T>({
     required KacheClientBuilder client,
     required KacheQueryBuilder<T> query,
     String? name,
     Iterable<ProviderOrFamily>? dependencies,
-    Duration? Function(int retryCount, Object error)? retry,
   }) => NotifierProvider<KacheNotifier<T>, KacheSnapshot<T>>(
     () => KacheNotifier<T>(client: client, query: query),
     name: name,
     dependencies: dependencies,
-    retry: retry,
   );
 
   /// Creates providers parameterized by a Riverpod family argument.
@@ -40,18 +45,16 @@ final class KacheAutoDisposeProviderBuilder {
   const KacheAutoDisposeProviderBuilder();
 
   /// Creates an auto-dispose provider with optional initial keep-alive.
-  NotifierProvider<KacheNotifier<T>, KacheSnapshot<T>> call<T>({
+  KacheProvider<T> call<T>({
     required KacheClientBuilder client,
     required KacheQueryBuilder<T> query,
     bool keepAlive = false,
     String? name,
     Iterable<ProviderOrFamily>? dependencies,
-    Duration? Function(int retryCount, Object error)? retry,
   }) => NotifierProvider.autoDispose<KacheNotifier<T>, KacheSnapshot<T>>(
     () => KacheNotifier<T>(client: client, query: query, keepAlive: keepAlive),
     name: name,
     dependencies: dependencies,
-    retry: retry,
   );
 
   /// Creates auto-dispose providers parameterized by a family argument.
@@ -65,13 +68,12 @@ final class KacheAutoDisposeProviderFamilyBuilder {
   const KacheAutoDisposeProviderFamilyBuilder();
 
   /// Creates an auto-dispose family whose argument is passed to [query].
-  NotifierProviderFamily<KacheNotifier<T>, KacheSnapshot<T>, Arg> call<T, Arg>({
+  KacheProviderFamily<T, Arg> call<T, Arg>({
     required KacheClientBuilder client,
     required KacheFamilyQueryBuilder<T, Arg> query,
     bool keepAlive = false,
     String? name,
     Iterable<ProviderOrFamily>? dependencies,
-    Duration? Function(int retryCount, Object error)? retry,
   }) => NotifierProvider.autoDispose
       .family<KacheNotifier<T>, KacheSnapshot<T>, Arg>(
         (argument) => KacheNotifier<T>(
@@ -81,7 +83,6 @@ final class KacheAutoDisposeProviderFamilyBuilder {
         ),
         name: name,
         dependencies: dependencies,
-        retry: retry,
       );
 }
 
@@ -91,17 +92,15 @@ final class KacheProviderFamilyBuilder {
   const KacheProviderFamilyBuilder();
 
   /// Creates a family whose argument is passed to [query].
-  NotifierProviderFamily<KacheNotifier<T>, KacheSnapshot<T>, Arg> call<T, Arg>({
+  KacheProviderFamily<T, Arg> call<T, Arg>({
     required KacheClientBuilder client,
     required KacheFamilyQueryBuilder<T, Arg> query,
     String? name,
     Iterable<ProviderOrFamily>? dependencies,
-    Duration? Function(int retryCount, Object error)? retry,
   }) => NotifierProvider.family<KacheNotifier<T>, KacheSnapshot<T>, Arg>(
     (argument) =>
         KacheNotifier<T>(client: client, query: (ref) => query(ref, argument)),
     name: name,
     dependencies: dependencies,
-    retry: retry,
   );
 }

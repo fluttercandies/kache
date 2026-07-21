@@ -7,7 +7,9 @@ const _canonicalLogoPath = 'assets/kache-logo.svg';
 const _packagePaths = <String>[
   'packages/kache',
   'packages/kache_flutter',
+  'packages/kache_flutter_hooks',
   'packages/kache_hive_ce',
+  'packages/kache_hooks_riverpod',
   'packages/kache_riverpod',
   'packages/kache_bloc',
   'packages/kache_connectivity_plus',

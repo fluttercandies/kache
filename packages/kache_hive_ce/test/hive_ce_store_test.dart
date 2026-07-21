@@ -187,6 +187,12 @@ void main() {
       if (!Hive.isAdapterRegistered(_OtherAdapter.typeIdValue)) {
         Hive.registerAdapter<_Other>(const _OtherAdapter());
       }
+      if (!Hive.isAdapterRegistered(_ExtendedAdapter.typeIdValue)) {
+        Hive.registerAdapter<_Extended>(const _ExtendedAdapter());
+      }
+      if (!Hive.isAdapterRegistered(_MaximumAdapter.typeIdValue)) {
+        Hive.registerAdapter<_Maximum>(const _MaximumAdapter());
+      }
     });
 
     test('round-trips an adapter value across a real box restart', () async {
@@ -228,6 +234,56 @@ void main() {
 
       expect(read?.entry.data, const _Profile(7, 'Ada'));
       expect(read?.entry.metadata.isInvalidated, isTrue);
+      await second.close();
+    });
+
+    test('round-trips extended adapter type id boundaries after restart',
+        () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'kache_hive_extended_adapter_',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final boxName = _boxName('extended-adapter-restart');
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        path: directory.path,
+      );
+      final extendedKey = KacheKey('extended-adapter', <Object?>[224]);
+      final maximumKey = KacheKey('extended-adapter', <Object?>[65439]);
+
+      await first.write<_Extended>(
+        key: extendedKey,
+        binding: first.bindAdapter<_Extended>(const _ExtendedAdapter()),
+        entry: KachePersistedEntry<_Extended>(
+          data: const _Extended(224),
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      await first.write<_Maximum>(
+        key: maximumKey,
+        binding: first.bindAdapter<_Maximum>(const _MaximumAdapter()),
+        entry: KachePersistedEntry<_Maximum>(
+          data: const _Maximum(65439),
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      await first.close();
+
+      final second = await HiveCeKacheStore.open(
+        boxName: boxName,
+        path: directory.path,
+      );
+      final extended = await second.read<_Extended>(
+        key: extendedKey,
+        binding: second.bindAdapter<_Extended>(const _ExtendedAdapter()),
+      );
+      final maximum = await second.read<_Maximum>(
+        key: maximumKey,
+        binding: second.bindAdapter<_Maximum>(const _MaximumAdapter()),
+      );
+
+      expect(extended?.entry.data.value, 224);
+      expect(maximum?.entry.data.value, 65439);
       await second.close();
     });
 
@@ -460,4 +516,46 @@ final class _OtherAdapter extends TypeAdapter<_Other> {
 
   @override
   void write(BinaryWriter writer, _Other obj) {}
+}
+
+final class _Extended {
+  const _Extended(this.value);
+
+  final int value;
+}
+
+final class _ExtendedAdapter extends TypeAdapter<_Extended> {
+  const _ExtendedAdapter();
+
+  static const typeIdValue = 224;
+
+  @override
+  int get typeId => typeIdValue;
+
+  @override
+  _Extended read(BinaryReader reader) => _Extended(reader.readInt());
+
+  @override
+  void write(BinaryWriter writer, _Extended obj) => writer.writeInt(obj.value);
+}
+
+final class _Maximum {
+  const _Maximum(this.value);
+
+  final int value;
+}
+
+final class _MaximumAdapter extends TypeAdapter<_Maximum> {
+  const _MaximumAdapter();
+
+  static const typeIdValue = 65439;
+
+  @override
+  int get typeId => typeIdValue;
+
+  @override
+  _Maximum read(BinaryReader reader) => _Maximum(reader.readInt());
+
+  @override
+  void write(BinaryWriter writer, _Maximum obj) => writer.writeInt(obj.value);
 }

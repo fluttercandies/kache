@@ -1,5 +1,5 @@
 name: kache_workspace
-version: 1.1.0
+version: 1.2.0
 publish_to: none
 
 environment:
@@ -8,7 +8,9 @@ environment:
 workspace:
   - packages/kache
   - packages/kache_flutter
+  - packages/kache_flutter_hooks
   - packages/kache_hive_ce
+  - packages/kache_hooks_riverpod
   - packages/kache_riverpod
   - packages/kache_bloc
   - packages/kache_connectivity_plus
@@ -23,14 +25,18 @@ workspace:
 dev_dependencies:
   flutter:
     sdk: flutter
+  flutter_hooks: ^0.21.3+1
   hive_ce: ^2.19.3
-  kache: ^1.1.0
-  kache_bloc: ^1.1.0
-  kache_connectivity_plus: ^1.1.0
-  kache_flutter: ^1.1.0
-  kache_hive_ce: ^1.1.0
-  kache_provider: ^1.1.0
-  kache_riverpod: ^1.1.0
+  hooks_riverpod: ^3.3.2
+  kache: ^1.2.0
+  kache_bloc: ^1.2.0
+  kache_connectivity_plus: ^1.2.0
+  kache_flutter: ^1.2.0
+  kache_flutter_hooks: ^1.2.0
+  kache_hive_ce: ^1.2.0
+  kache_hooks_riverpod: ^1.2.0
+  kache_provider: ^1.2.0
+  kache_riverpod: ^1.2.0
   lints: ^6.1.0
   melos: 8.2.2
   pub_semver: 2.2.0
@@ -47,6 +53,7 @@ melos:
     test:hive: 'melos exec --scope=kache_hive_ce --dir-exists=test -- dart test && melos run test:persistence-contracts'
     test:connectivity: 'melos exec --scope=kache_connectivity_plus -- flutter test && melos exec --scope=kache_connectivity_plus -- flutter test -d chrome && melos exec --scope=kache_contract_tests -- flutter test test/connectivity_contract_test.dart'
     test:riverpod: 'melos exec --scope=kache_riverpod -- dart test'
+    test:hooks: 'melos exec --scope=kache_flutter_hooks -- flutter test && melos exec --scope=kache_hooks_riverpod -- flutter test'
     test:bloc: 'melos exec --scope=kache_bloc -- dart test'
     test:core-failure-injection: 'melos exec --scope=kache -- dart test test/failure_injection_test.dart'
     test:core-lifecycle: 'melos exec --scope=kache -- dart test test/lifecycle_stress_test.dart'

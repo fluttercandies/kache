@@ -7,7 +7,9 @@ import 'package:yaml/yaml.dart';
 const _packagePaths = <String>[
   'packages/kache',
   'packages/kache_flutter',
+  'packages/kache_flutter_hooks',
   'packages/kache_hive_ce',
+  'packages/kache_hooks_riverpod',
   'packages/kache_riverpod',
   'packages/kache_bloc',
   'packages/kache_connectivity_plus',
@@ -28,7 +30,9 @@ const _workspacePackagePaths = <String>[
 const _publishedSdkConstraints = <String, String>{
   'packages/kache': '>=3.5.0 <4.0.0',
   'packages/kache_flutter': '>=3.5.0 <4.0.0',
+  'packages/kache_flutter_hooks': '>=3.8.0 <4.0.0',
   'packages/kache_hive_ce': '>=3.5.0 <4.0.0',
+  'packages/kache_hooks_riverpod': '>=3.8.0 <4.0.0',
   'packages/kache_riverpod': '>=3.7.0 <4.0.0',
   'packages/kache_bloc': '>=3.5.0 <4.0.0',
   'packages/kache_connectivity_plus': '>=3.5.0 <4.0.0',
@@ -37,6 +41,8 @@ const _publishedSdkConstraints = <String, String>{
 
 const _publishedFlutterConstraints = <String, String>{
   'packages/kache_flutter': '>=3.24.0',
+  'packages/kache_flutter_hooks': '>=3.32.0',
+  'packages/kache_hooks_riverpod': '>=3.32.0',
   'packages/kache_connectivity_plus': '>=3.24.0',
   'packages/kache_provider': '>=3.24.0',
 };
@@ -45,7 +51,7 @@ void main() {
   test('workspace package versions are aligned for the minor release', () {
     for (final path in _workspacePackagePaths) {
       final pubspec = _pubspec(path);
-      expect(pubspec['version'], '1.1.0', reason: path);
+      expect(pubspec['version'], '1.2.0', reason: path);
     }
   });
 
@@ -112,12 +118,27 @@ void main() {
 
   test('framework and persistence constraints match the supported matrix', () {
     _expectDependency('packages/kache_hive_ce', 'hive_ce', '^2.19.3');
+    _expectDependency(
+      'packages/kache_flutter_hooks',
+      'flutter_hooks',
+      '^0.21.3+1',
+    );
     _expectDependency('packages/kache_riverpod', 'riverpod', '^3.3.2');
+    _expectDependency(
+      'packages/kache_hooks_riverpod',
+      'flutter_hooks',
+      '^0.21.3+1',
+    );
+    _expectDependency(
+      'packages/kache_hooks_riverpod',
+      'hooks_riverpod',
+      '^3.3.2',
+    );
     _expectDependency('packages/kache_bloc', 'bloc', '^9.2.1');
     _expectDependency(
       'packages/kache_connectivity_plus',
       'connectivity_plus',
-      '^7.2.0',
+      '^7.3.0',
     );
     _expectDependency('packages/kache_provider', 'provider', '^6.1.5+1');
 
@@ -131,24 +152,28 @@ void main() {
       'kache_bloc',
       'kache_connectivity_plus',
       'kache_flutter',
+      'kache_flutter_hooks',
       'kache_hive_ce',
+      'kache_hooks_riverpod',
       'kache_provider',
       'kache_riverpod',
     ]) {
-      _expectDependency('.', dependency, '^1.1.0', dev: true);
+      _expectDependency('.', dependency, '^1.2.0', dev: true);
     }
   });
 
   test('every internal published dependency accepts the minor release', () {
     for (final entry in const <(String, String)>[
       ('packages/kache_flutter', 'kache'),
+      ('packages/kache_flutter_hooks', 'kache_flutter'),
       ('packages/kache_hive_ce', 'kache'),
       ('packages/kache_riverpod', 'kache'),
+      ('packages/kache_hooks_riverpod', 'kache_riverpod'),
       ('packages/kache_bloc', 'kache'),
       ('packages/kache_connectivity_plus', 'kache'),
       ('packages/kache_provider', 'kache_flutter'),
     ]) {
-      _expectDependency(entry.$1, entry.$2, '^1.1.0');
+      _expectDependency(entry.$1, entry.$2, '^1.2.0');
     }
   });
 
@@ -195,7 +220,7 @@ void main() {
     for (final path in _packagePaths) {
       expect(
         File('$path/CHANGELOG.md').readAsStringSync(),
-        startsWith('## 1.1.0\n'),
+        startsWith('## 1.2.0\n'),
         reason: path,
       );
     }

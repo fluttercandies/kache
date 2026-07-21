@@ -82,8 +82,13 @@ Future<void> observeUser(UserApi api, String text, int page) async {
 - `kacheProvider.autoDispose<T>` 在 Riverpod dispose 后释放 resource。
 - `kacheProvider.autoDispose.family<T, Arg>` 组合两者。
 
+builder 通过短别名 `KacheProvider<T>` 和 `KacheProviderFamily<T, Arg>` 返回原生
+`NotifierProvider`，不会引入平行的 provider 抽象。
+
 client 与 query callback 都接收 `Ref`，可以 watch 普通 Riverpod 依赖。provider 拥有
-一个 resource handle，但不会关闭 client。
+当某个依赖会在嵌套 `ProviderScope` 中被 override 时，应按 Riverpod 原生作用域
+契约将该依赖声明为 scoped，并在 Kache provider 的 `dependencies` 中列出。
+provider 拥有一个 resource handle，但不会关闭 client。
 
 Provider 直接暴露 `KacheSnapshot<T>`。使用 `snapshot.when` 渲染，确保 idle 和保留旧
 数据的刷新失败都有显式分支。Kache 不转换为 `AsyncValue`，因为转换会丢失 freshness、
@@ -91,21 +96,54 @@ source、persistence，以及“缓存正在刷新”和“缓存伴随错误”
 
 ## 命令与生命周期
 
-读取 notifier 后可以调用 `load`、`refresh`、`setData`、`updateData`、
-`invalidate` 和 `remove`。`keepAlive()` 与 `releaseKeepAlive()` 只管理 Riverpod
-keep-alive link，不改变核心 cache GC 语义。
+通过 notifier 可以调用 `load`、`refresh`、`setData`、`updateData`、
+`invalidate` 和 `remove`。如果 notifier 或它的属性会影响 widget `build` 输出，
+应 watch `provider.notifier`；如果只在事件中执行命令，应在事件回调内部 read
+notifier。这遵循 Riverpod 不在 build 中捕获 `ref.read` 值的建议。`keepAlive()` 与
+`releaseKeepAlive()` 只管理 Riverpod keep-alive link，不改变核心 cache GC 语义。
 
 provider dispose 会取消快照订阅并释放 resource；延迟完成的 fetch 不会向已销毁
 notifier emit。
 
+`ref.refresh(provider)` 与 `ref.invalidate(provider)` 会重建 Riverpod provider 并
+绑定新 resource。`ref.read(provider.notifier).refresh()` 保持 provider 和 resource
+身份，只强制执行一次 Kache fetch。
+
 provider 持有活动 resource 时，`refreshInterval` 会按周期刷新。纯 Dart 宿主由 client
 owner 调用 `pausePolling()` 和 `resumePolling()` 管理后台计时器。
 
+## Riverpod 互操作
+
+| Riverpod 能力 | Kache 契约 |
+| --- | --- |
+| `watch`、`read`、`listen`、`select` | 保持原生行为 |
+| ProviderScope/Container 与 observer | 保持原生行为 |
+| `name` 与 scoped `dependencies` | 所有 builder 原样传递 |
+| family、record 参数与 auto-dispose family | 保持原生 family 身份 |
+| `keepAlive` | notifier 显式 link，依赖重建时保留意图 |
+| provider refresh/invalidate | 重建并重新绑定 provider resource |
+| ProviderSubscription pause/resume | 恢复时重放 Riverpod 保留的最后快照 |
+| `overrideWith` / family `overrideWith2` | 使用替换 `KacheNotifier`，完整支持 |
+| `overrideWithBuild` | 不支持，因为会绕过 Kache resource binding |
+
+Riverpod 3.3.2 的同步 `NotifierProvider` 虽暴露 `retry` 参数，但同步 element 遇到
+build 错误时不会调用该 callback，因此 Kache 不暴露误导性的 retry 选项。client/query
+build 错误进入 Riverpod 同步 provider 错误通道；fetch 失败是
+`KacheSnapshot.failure` 数据，请在 fetcher 内组合请求重试。
+
+Kache 不增加 `AsyncValue` 转换、Riverpod offline persistence、实验 Mutation wrapper
+或 code generation。这些能力会丢失缓存状态、制造重复持久化所有权、绑定不稳定 API，
+或在没有运行时收益时引入构建系统。应用层 Riverpod mutation 可以直接调用 notifier
+命令。
+
 ## Flutter
 
-应用根节点使用 `ProviderScope`。`Consumer` watch Kache provider，并读取 notifier
-执行命令。应用还需要生命周期感知的轮询与 resume 重验时，配合 `kache_flutter` 的
-`KacheScope`。
+应用根节点使用 `ProviderScope`。`Consumer` watch Kache provider；notifier 要么作为
+build 依赖被 watch，要么在命令事件回调中被 read。应用还需要生命周期感知的轮询与
+resume 重验时，配合 `kache_flutter` 的 `KacheScope`。
+
+`HookConsumerWidget` 添加 `kache_hooks_riverpod` 并调用
+`useKacheProvider(ref, provider)`。它消费现有 provider，不会创建另一份 resource。
 
 ## 兼容性
 

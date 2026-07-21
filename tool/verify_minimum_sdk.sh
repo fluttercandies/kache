@@ -25,6 +25,24 @@ prepare_package() {
   case "$package" in
     kache)
       ;;
+    kache_flutter_hooks)
+      cat >"$destination/pubspec_overrides.yaml" <<EOF
+dependency_overrides:
+  kache:
+    path: ../kache
+  kache_flutter:
+    path: ../kache_flutter
+EOF
+      ;;
+    kache_hooks_riverpod)
+      cat >"$destination/pubspec_overrides.yaml" <<EOF
+dependency_overrides:
+  kache:
+    path: ../kache
+  kache_riverpod:
+    path: ../kache_riverpod
+EOF
+      ;;
     kache_provider)
       cat >"$destination/pubspec_overrides.yaml" <<EOF
 dependency_overrides:
@@ -89,8 +107,20 @@ case "$profile" in
     done
     run_dart_package kache_riverpod
     ;;
+  flutter-3.32)
+    for package in \
+      kache \
+      kache_flutter \
+      kache_flutter_hooks \
+      kache_riverpod \
+      kache_hooks_riverpod; do
+      prepare_package "$package"
+    done
+    run_flutter_package kache_flutter_hooks
+    run_flutter_package kache_hooks_riverpod
+    ;;
   *)
-    echo "Usage: $0 {flutter-3.24|dart-3.7}" >&2
+    echo "Usage: $0 {flutter-3.24|dart-3.7|flutter-3.32}" >&2
     exit 64
     ;;
 esac

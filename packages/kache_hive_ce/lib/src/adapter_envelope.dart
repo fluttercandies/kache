@@ -1,6 +1,6 @@
 const _adapterMagic = 'KCH-A1';
 const _adapterVersion = 1;
-const _maximumAdapterTypeId = 223;
+const _maximumAdapterTypeId = 65439;
 const _maximumSafeMicroseconds = 9007199254740991;
 
 final class HiveCeAdapterEnvelope {
@@ -22,7 +22,7 @@ final class HiveCeAdapterEnvelope {
     required int typeId,
     required Object? data,
   }) {
-    _validateTypeId(typeId);
+    validateTypeId(typeId);
     final micros = fetchedAt.toUtc().microsecondsSinceEpoch;
     if (micros < -_maximumSafeMicroseconds ||
         micros > _maximumSafeMicroseconds) {
@@ -55,7 +55,7 @@ final class HiveCeAdapterEnvelope {
     if (typeId is! int || micros is! int || invalidated is! bool) {
       throw const FormatException('Hive CE adapter record fields are invalid.');
     }
-    _validateTypeId(typeId);
+    validateTypeId(typeId);
     if (micros < -_maximumSafeMicroseconds ||
         micros > _maximumSafeMicroseconds) {
       throw const FormatException(
@@ -78,12 +78,15 @@ final class HiveCeAdapterEnvelope {
     );
   }
 
-  static void _validateTypeId(int typeId) {
+  static void validateTypeId(
+    int typeId, {
+    String argumentName = 'typeId',
+  }) {
     if (typeId < 0 || typeId > _maximumAdapterTypeId) {
       throw ArgumentError.value(
         typeId,
-        'typeId',
-        'Must be an external Hive CE type id from 0 through 223.',
+        argumentName,
+        'Must be an external Hive CE type id from 0 through 65439.',
       );
     }
   }

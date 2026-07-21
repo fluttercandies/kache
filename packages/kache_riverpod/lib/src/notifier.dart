@@ -19,6 +19,10 @@ typedef KacheFamilyQueryBuilder<T, Arg> =
 /// Use the top-level `kacheProvider` builder to construct providers. The
 /// notifier exposes the full [KacheSnapshot] so cached data, refresh progress,
 /// and failures can coexist.
+///
+/// Override a Kache provider with Riverpod's `overrideWith` and construct a
+/// replacement notifier. `overrideWithBuild` is incompatible because it skips
+/// the resource binding performed by [build].
 final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
   /// Creates a notifier for the supplied client and query builders.
   KacheNotifier({
@@ -48,10 +52,23 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
   KacheSnapshot<T> build() {
     final resource = _clientBuilder(ref).watch(_queryBuilder(ref));
     _resource = resource;
+    ref.onDispose(() {
+      resource.dispose();
+      if (identical(_resource, resource)) {
+        _resource = null;
+      }
+    });
     if (_keepAliveRequested) {
       _keepAliveLink = ref.keepAlive();
     }
+    ref.onDispose(() => _keepAliveLink = null);
     StreamSubscription<KacheSnapshot<T>>? subscription;
+    ref.onDispose(() {
+      final activeSubscription = subscription;
+      if (activeSubscription != null) {
+        unawaited(activeSubscription.cancel());
+      }
+    });
     scheduleMicrotask(() {
       if (!ref.mounted || !identical(_resource, resource)) {
         return;
@@ -61,17 +78,6 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
           state = snapshot;
         }
       });
-    });
-    ref.onDispose(() {
-      _keepAliveLink = null;
-      final activeSubscription = subscription;
-      if (activeSubscription != null) {
-        unawaited(activeSubscription.cancel());
-      }
-      resource.dispose();
-      if (identical(_resource, resource)) {
-        _resource = null;
-      }
     });
     return resource.snapshot;
   }

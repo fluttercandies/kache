@@ -18,6 +18,7 @@ scripts:
   - test:examples
   - test:failure-injection
   - test:hive
+  - test:hooks
   - test:integration
   - test:lifecycle
   - test:persistence-contracts

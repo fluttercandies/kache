@@ -19,5 +19,11 @@ KacheFamilyQueryBuilder<int, String> verifyFamilyQueryBuilder(
 
 KacheProviderBuilder verifyTopLevelBuilder() => kacheProvider;
 
+KacheProvider<int> verifyProvider(KacheProvider<int> provider) => provider;
+
+KacheProviderFamily<int, String> verifyProviderFamily(
+  KacheProviderFamily<int, String> family,
+) => family;
+
 Future<KacheSnapshot<int>> verifyNotifierRefresh(KacheNotifier<int> notifier) =>
     notifier.refresh();

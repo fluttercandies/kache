@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:kache_hive_ce/src/adapter_envelope.dart';
 import 'package:kache_hive_ce/src/envelope.dart';
 import 'package:test/test.dart';
 
@@ -99,6 +100,44 @@ void main() {
       ),
       throwsArgumentError,
     );
+  });
+
+  test('accepts the full Hive CE external adapter type id range', () {
+    for (final typeId in <int>[0, 223, 224, 65439]) {
+      final encoded = HiveCeAdapterEnvelope.encode(
+        fetchedAt: DateTime.utc(2026),
+        isInvalidated: false,
+        typeId: typeId,
+        data: null,
+      );
+
+      expect(HiveCeAdapterEnvelope.decode(encoded).typeId, typeId);
+    }
+  });
+
+  test('rejects adapter type ids outside the Hive CE external range', () {
+    for (final typeId in <int>[-1, 65440]) {
+      expect(
+        () => HiveCeAdapterEnvelope.encode(
+          fetchedAt: DateTime.utc(2026),
+          isInvalidated: false,
+          typeId: typeId,
+          data: null,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => HiveCeAdapterEnvelope.decode(<Object?>[
+          'KCH-A1',
+          1,
+          typeId,
+          0,
+          false,
+          null,
+        ]),
+        throwsArgumentError,
+      );
+    }
   });
 }
 

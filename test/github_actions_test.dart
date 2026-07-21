@@ -79,6 +79,10 @@ void main() {
           'flutter': '3.29.3',
           'profile': 'dart-3.7',
         }),
+        YamlMap.wrap(<String, Object?>{
+          'flutter': '3.32.8',
+          'profile': 'flutter-3.32',
+        }),
       ]),
     );
 
@@ -107,6 +111,7 @@ void main() {
       'melos run test:hive',
       'melos run test:connectivity',
       'melos run test:riverpod',
+      'melos run test:hooks',
       'melos run test:bloc',
       'melos run test:core-failure-injection',
       'melos run test:core-lifecycle',

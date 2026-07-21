@@ -97,6 +97,10 @@ Pull to refresh calls the same deduplicated query explicitly.
 - `KacheController<T>` is a `ValueListenable<KacheSnapshot<T>>` and exposes all
   resource commands.
 
+For `HookWidget`, use the separate `kache_flutter_hooks` package. Its
+`useKache(query)` hook returns this same controller and does not add another
+state model.
+
 When a widget receives a new query with the same key, the controller updates
 the handle's fetcher and policy without losing shared data. A different key
 releases the previous handle and binds a new one.

@@ -1,3 +1,8 @@
+## 1.2.0
+
+- Updated the Kache core compatibility range for the coordinated 1.2 release.
+- Added support for Hive CE extended external TypeAdapter ids through 65439.
+
 ## 1.1.0
 
 - Added `bindAdapter<T>` for reusing Hive CE `TypeAdapter` registrations

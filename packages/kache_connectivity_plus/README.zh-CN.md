@@ -87,11 +87,11 @@ scope 会暂停 reconnect 重验；恢复前台后只消费一次待处理恢复
 | --- | --- |
 | Dart | Dart >=3.5.0 <4.0.0 |
 | Flutter | Flutter >=3.24.0 |
-| connectivity_plus | `>=7.2.0 <8.0.0` |
+| connectivity_plus | `>=7.3.0 <8.0.0` |
 | Android | minSdk 21、Java 17、AGP >=8.12.1、Gradle >=8.13、Kotlin 2.2.0 |
 | Apple | iOS >=12.0、macOS >=10.14、Xcode >=26.1.1 |
 
-通过 connectivity_plus 7.2.0 支持 Android、iOS、macOS、Linux、Windows 和 Web。
+通过 connectivity_plus 7.3.0 支持 Android、iOS、macOS、Linux、Windows 和 Web。
 connectivity 只表示存在可用网络接口，不代表已经验证 Internet 可达。即使 Flutter SDK
 约束能够解析，已有 Android 工程仍必须满足上表中的原生构建工具要求。
 

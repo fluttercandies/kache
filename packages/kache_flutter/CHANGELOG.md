@@ -1,3 +1,8 @@
+## 1.2.0
+
+- Added the supported foundation for `kache_flutter_hooks` while preserving
+  the existing controller and widget APIs.
+
 ## 1.1.0
 
 - Exposed the new `KacheSnapshot.when`, `maybeWhen`, and `mapData` APIs through

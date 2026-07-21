@@ -1,3 +1,7 @@
+## 1.2.0
+
+- Updated the Kache core compatibility range for the coordinated 1.2 release.
+
 ## 1.1.0
 
 - Exposed the new `KacheSnapshot` rendering and data-mapping APIs through Bloc
