@@ -216,6 +216,29 @@ redact, print, or export with standard stream operators. `kind`, `phase`, and
 `trigger` describe the operation; `traceId`, `id`, and `parentId` correlate
 spans; `clientId` and `sequence` preserve per-client order.
 
+Subscribe narrowly and pass the event to your own redaction/reporting boundary:
+
+```dart
+import 'dart:async';
+
+import 'package:kache/kache.dart';
+
+StreamSubscription<KacheEvent> watchFailures(
+  KacheClient client,
+  void Function(KacheEvent event) report,
+) => client.events
+    .where(
+      (event) =>
+          event.phase == KacheEventPhase.failed ||
+          event.phase == KacheEventPhase.cancelled,
+    )
+    .listen(report);
+```
+
+Keep the returned subscription and cancel it with its owner. Passing
+`event.toString()` is safe by default; reading `dataOrNull`, `key`, or
+`metadata` is an explicit application decision that needs its own redaction.
+
 ## Cancellation
 
 `resource.cancel()` cancels the active shared fetch for its key.
@@ -231,6 +254,39 @@ or errors are isolated. Fetchers receive `context.cancellation`; bridge
 call `context.throwIfCancelled()` after awaited work for cooperative physical
 cancellation. Automatic supersession reports a precise reason such as
 `dataSet`, `invalidate`, `remove`, `clear`, or `close`.
+
+For Dio, create one token per fetch and bridge cancellation at the request
+boundary:
+
+```dart
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:kache/kache.dart';
+
+Future<T> withDioCancellation<T>(
+  KacheFetchContext context,
+  Future<T> Function(CancelToken token) request,
+) async {
+  final token = CancelToken();
+  unawaited(context.cancellation.whenCancelled.then(token.cancel));
+
+  try {
+    final value = await request(token);
+    context.throwIfCancelled();
+    return value;
+  } on DioException catch (error) {
+    if (CancelToken.isCancel(error) && context.isCancelled) {
+      context.throwIfCancelled();
+    }
+    rethrow;
+  }
+}
+```
+
+Use the helper inside `fetch`, passing its token to Dio's `cancelToken`
+argument. A fresh token is required for every fetch because Dio cancel tokens
+cannot be reused after cancellation.
 
 ## Lifecycle
 

@@ -196,6 +196,28 @@ Kache 不会自动打印或上传事件，`KacheEvent.toString()` 始终省略 d
 和上传。`kind`、`phase`、`trigger` 描述操作，`traceId`、`id`、`parentId` 关联 span，
 `clientId` 与 `sequence` 保留单个 client 内的顺序。
 
+订阅时只选择需要的事件，再交给应用自己的脱敏/上报边界：
+
+```dart
+import 'dart:async';
+
+import 'package:kache/kache.dart';
+
+StreamSubscription<KacheEvent> watchFailures(
+  KacheClient client,
+  void Function(KacheEvent event) report,
+) => client.events
+    .where(
+      (event) =>
+          event.phase == KacheEventPhase.failed ||
+          event.phase == KacheEventPhase.cancelled,
+    )
+    .listen(report);
+```
+
+持有返回的 subscription，并随其 owner 一起取消。默认传递 `event.toString()` 不会
+泄露敏感内容；读取 `dataOrNull`、`key` 或 `metadata` 是应用的显式选择，必须自行脱敏。
+
 ## 取消
 
 `resource.cancel()` 取消当前 key 正在执行的共享 fetch；没有 handle 时可以调用
@@ -208,6 +230,37 @@ Kache 不会自动打印或上传事件，`KacheEvent.toString()` 始终省略 d
 客户端的 cancel token 或 abort controller，并在 await 后调用
 `context.throwIfCancelled()` 完成协作式物理取消。set、invalidate、remove、clear、close
 自动取代请求时会分别报告 `dataSet`、`invalidate`、`remove`、`clear`、`close` 原因。
+
+Dio 接入时，每次 fetch 创建一个 token，并在请求边界桥接取消：
+
+```dart
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:kache/kache.dart';
+
+Future<T> withDioCancellation<T>(
+  KacheFetchContext context,
+  Future<T> Function(CancelToken token) request,
+) async {
+  final token = CancelToken();
+  unawaited(context.cancellation.whenCancelled.then(token.cancel));
+
+  try {
+    final value = await request(token);
+    context.throwIfCancelled();
+    return value;
+  } on DioException catch (error) {
+    if (CancelToken.isCancel(error) && context.isCancelled) {
+      context.throwIfCancelled();
+    }
+    rethrow;
+  }
+}
+```
+
+在 query 的 `fetch` 内调用这个 helper，并把 token 传给 Dio 的 `cancelToken` 参数。
+Dio token 取消后不能复用，因此每次 fetch 都必须创建新 token。
 
 ## 生命周期
 

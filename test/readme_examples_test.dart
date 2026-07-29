@@ -18,6 +18,11 @@ const _documents = <String, String>{
   'packages/kache_provider': 'test/readme_examples/kache_provider.dart',
 };
 
+const _rootRecipes = <String>[
+  'test/readme_examples/dio_cancellation.dart',
+  'test/readme_examples/event_subscription.dart',
+];
+
 void main() {
   test('every published surface has synchronized bilingual documentation', () {
     for (final entry in _documents.entries) {
@@ -76,6 +81,19 @@ void main() {
       '## 兼容性',
     ]) {
       expect(chinese, contains(heading));
+    }
+  });
+
+  test('root documentation includes short cancellation and event recipes', () {
+    final documents = <String>[
+      File('README.md').readAsStringSync(),
+      File('README.zh-CN.md').readAsStringSync(),
+    ];
+    for (final document in documents) {
+      for (final recipe in _rootRecipes) {
+        final example = File(recipe).readAsStringSync().trim();
+        expect(document, contains('```dart\n$example\n```'));
+      }
     }
   });
 
