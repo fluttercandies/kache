@@ -9,7 +9,9 @@ final class ScriptedPersistence implements KachePersistenceBackend {
   Object? deleteError;
   StackTrace? deleteStackTrace;
   KachePersistenceMaintenance? maintenance;
+  Future<void> Function()? onRead;
   Future<void> Function(Object? entry)? onWrite;
+  Future<void> Function()? onDelete;
   Future<void> Function()? onClear;
   Future<void> Function()? onClose;
 
@@ -32,6 +34,7 @@ final class ScriptedPersistence implements KachePersistenceBackend {
     _ensureOpen(KachePersistenceOperation.read);
     binding.ensureBackend(this);
     readCount += 1;
+    await onRead?.call();
     final error = readError;
     if (error != null) {
       Error.throwWithStackTrace(error, readStackTrace ?? StackTrace.current);
@@ -71,6 +74,7 @@ final class ScriptedPersistence implements KachePersistenceBackend {
     if (error != null) {
       Error.throwWithStackTrace(error, deleteStackTrace ?? StackTrace.current);
     }
+    await onDelete?.call();
     storedEntry = null;
   }
 

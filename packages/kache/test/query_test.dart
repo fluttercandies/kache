@@ -122,14 +122,21 @@ void main() {
       expect(context.isCancelled, isFalse);
       expect(() => context.throwIfCancelled(), returnsNormally);
 
-      controller.cancel();
+      expect(controller.cancel(KacheCancelReason.invalidate), isTrue);
 
       expect(context.isCancelled, isTrue);
+      expect(context.cancellation.reason, KacheCancelReason.invalidate);
       expect(
         () => context.throwIfCancelled(),
-        throwsA(isA<KacheCancelledException>()),
+        throwsA(
+          isA<KacheCancelledException>().having(
+            (error) => error.reason,
+            'reason',
+            KacheCancelReason.invalidate,
+          ),
+        ),
       );
-      expect(() => controller.cancel(), returnsNormally);
+      expect(controller.cancel(), isFalse);
     });
 
     test('default context never cancels', () {

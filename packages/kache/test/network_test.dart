@@ -33,7 +33,9 @@ void main() {
 
     network.emit(KacheNetworkState.unavailable);
     final completed = client.events.firstWhere(
-      (event) => event.kind == KacheEventKind.reconnectCompleted,
+      (event) =>
+          event.kind == KacheEventKind.reconnect &&
+          event.phase == KacheEventPhase.succeeded,
     );
     network.emit(KacheNetworkState.available);
     await completed;
@@ -43,9 +45,45 @@ void main() {
     expect(cacheOnly.snapshot.requireData, 'offline');
     expect(cacheOnly.snapshot.failure, isNull);
     expect(
-      events.where((event) => event.kind == KacheEventKind.reconnectStarted),
+      events.where(
+        (event) =>
+            event.kind == KacheEventKind.reconnect &&
+            event.phase == KacheEventPhase.started,
+      ),
       hasLength(1),
     );
+    final networkEvents =
+        events.where((event) => event.kind == KacheEventKind.network).toList();
+    expect(
+      networkEvents.map((event) => event.networkState),
+      <KacheNetworkState>[
+        KacheNetworkState.available,
+        KacheNetworkState.unavailable,
+        KacheNetworkState.available,
+      ],
+    );
+    expect(
+      networkEvents.every(
+        (event) =>
+            event.phase == KacheEventPhase.succeeded &&
+            event.trigger == KacheEventTrigger.network &&
+            event.layer == KacheLayer.network,
+      ),
+      isTrue,
+    );
+    final reconnect = events.singleWhere(
+      (event) =>
+          event.kind == KacheEventKind.reconnect &&
+          event.phase == KacheEventPhase.started,
+    );
+    final reconnectFetch = events.singleWhere(
+      (event) =>
+          event.kind == KacheEventKind.fetch &&
+          event.phase == KacheEventPhase.started &&
+          event.trigger == KacheEventTrigger.reconnect,
+    );
+    expect(reconnectFetch.traceId, reconnect.traceId);
+    expect(reconnectFetch.parentId, reconnect.id);
     active.dispose();
     cacheOnly.dispose();
     await client.close();
@@ -71,7 +109,9 @@ void main() {
     expect(fetches, 0);
 
     final completed = client.events.firstWhere(
-      (event) => event.kind == KacheEventKind.reconnectCompleted,
+      (event) =>
+          event.kind == KacheEventKind.reconnect &&
+          event.phase == KacheEventPhase.succeeded,
     );
     client.resumeReconnect();
     await completed;
@@ -100,7 +140,11 @@ void main() {
       ),
     );
     final completions = client.events
-        .where((event) => event.kind == KacheEventKind.reconnectCompleted)
+        .where(
+          (event) =>
+              event.kind == KacheEventKind.reconnect &&
+              event.phase == KacheEventPhase.succeeded,
+        )
         .take(2)
         .toList();
     network.emit(KacheNetworkState.unavailable);
@@ -133,7 +177,8 @@ void main() {
       final failures = client.events
           .where(
             (event) =>
-                event.kind == KacheEventKind.failure &&
+                event.kind == KacheEventKind.network &&
+                event.phase == KacheEventPhase.failed &&
                 event.failure?.kind == KacheFailureKind.connectivity,
           )
           .take(2)
@@ -166,6 +211,30 @@ void main() {
     await ownedClient.close();
     await ownedClient.close();
     expect(owned.closeCount, 1);
+  });
+
+  test('owned network close failure remains observable before stream close',
+      () async {
+    final network = _FakeNetwork()..closeError = StateError('close failed');
+    final events = <KacheEvent>[];
+    final client = KacheClient(
+      network: network,
+      networkOwnership: KacheNetworkOwnership.owned,
+    );
+    client.events.listen(events.add);
+
+    await expectLater(client.close(), throwsStateError);
+
+    final dependency = events.singleWhere(
+      (event) =>
+          event.kind == KacheEventKind.close &&
+          event.layer == KacheLayer.network &&
+          event.phase == KacheEventPhase.failed,
+    );
+    expect(dependency.failure?.kind, KacheFailureKind.connectivity);
+    expect(events.last.kind, KacheEventKind.close);
+    expect(events.last.layer, isNull);
+    expect(events.last.phase, KacheEventPhase.failed);
   });
 
   test(
@@ -215,6 +284,7 @@ final class _FakeNetwork implements KacheNetwork {
   final StreamController<KacheNetworkState> _states =
       StreamController<KacheNetworkState>.broadcast(sync: true);
   int closeCount = 0;
+  Object? closeError;
 
   @override
   Stream<KacheNetworkState> get states => _states.stream;
@@ -231,6 +301,9 @@ final class _FakeNetwork implements KacheNetwork {
       return;
     }
     closeCount += 1;
+    if (closeError case final error?) {
+      Error.throwWithStackTrace(error, StackTrace.current);
+    }
     await _states.close();
   }
 }

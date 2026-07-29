@@ -178,7 +178,9 @@ final class _RiverpodPoliciesTabState
   void initState() {
     super.initState();
     _subscription = ref.read(_runtimeProvider).client.events.listen((event) {
-      if (event.kind == KacheEventKind.fetchStarted && event.key != null) {
+      if (event.kind == KacheEventKind.fetch &&
+          event.phase == KacheEventPhase.started &&
+          event.key != null) {
         final key = event.key!.storageKey;
         if (mounted) {
           setState(() => _fetchCounts[key] = (_fetchCounts[key] ?? 0) + 1);

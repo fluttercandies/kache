@@ -24,6 +24,8 @@ abstract interface class AdapterContractHarness {
 
   Future<KacheSnapshot<int>> refresh();
 
+  bool cancel();
+
   Future<KacheSnapshot<int>> invalidate({required bool refetch});
 
   Future<void> replaceQuery(KacheQuery<int> query);
@@ -175,6 +177,43 @@ void runAdapterContract(List<AdapterHarnessFactory> factories) {
           expect(harness.snapshot.requireData, 2);
           expect(fetchCount, 2);
         } finally {
+          await harness.dispose();
+          await client.close();
+        }
+      });
+
+      testWidgets('cancels a pending fetch through the adapter command', (
+        tester,
+      ) async {
+        final gate = Completer<int>();
+        final client = KacheClient();
+        final harness = await factory.create(
+          tester,
+          client,
+          KacheQuery.memory(
+            key: KacheKey('adapter-contract', <Object?>['cancel']),
+            fetch: (context) => gate.future,
+          ),
+        );
+
+        try {
+          await harness.settle();
+          expect(harness.snapshot.isLoading, isTrue);
+
+          expect(harness.cancel(), isTrue);
+          await harness.settle();
+
+          expect(harness.snapshot.phase, KachePhase.idle);
+          expect(harness.snapshot.failure, isNull);
+          expect(harness.cancel(), isFalse);
+          gate.complete(1);
+          await gate.future;
+          await harness.settle();
+          expect(harness.snapshot.phase, KachePhase.idle);
+        } finally {
+          if (!gate.isCompleted) {
+            gate.complete(1);
+          }
           await harness.dispose();
           await client.close();
         }

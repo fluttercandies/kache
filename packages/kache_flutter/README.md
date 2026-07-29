@@ -95,7 +95,7 @@ Pull to refresh calls the same deduplicated query explicitly.
   snapshots.
 - `KacheListener<T>` performs side effects without rebuilding its child.
 - `KacheController<T>` is a `ValueListenable<KacheSnapshot<T>>` and exposes all
-  resource commands.
+  resource commands, including `cancel()` for the current key's shared fetch.
 
 For `HookWidget`, use the separate `kache_flutter_hooks` package. Its
 `useKache(query)` hook returns this same controller and does not add another
@@ -104,6 +104,10 @@ state model.
 When a widget receives a new query with the same key, the controller updates
 the handle's fetcher and policy without losing shared data. A different key
 releases the previous handle and binds a new one.
+
+Cancellation is key-scoped because same-key controllers share one core fetch.
+It restores the pre-fetch snapshot without disposing the controller; late
+results from a non-cooperative Future remain isolated by the core.
 
 ## Ownership
 

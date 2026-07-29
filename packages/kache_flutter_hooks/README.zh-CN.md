@@ -86,8 +86,8 @@ client 或 key 改变会创建新 controller，并隔离旧 binding 的延迟结
 
 - `useKache<T>(query, client:)` 返回 `KacheController<T>`。
 - `cache.snapshot` 是 `cache.value` 的可读别名。
-- `load`、`refresh`、`setData`、`updateData`、`invalidate` 和 `remove` 都是既有
-  controller 命令。
+- `load`、`refresh`、`setData`、`updateData`、`invalidate`、`remove` 与按 key
+  生效的 `cancel` 都是既有 controller 命令。
 
 本包 re-export `kache_flutter`，但不 re-export `flutter_hooks`。源码使用
 `HookWidget` 时，应用必须直接声明并 import `flutter_hooks`。

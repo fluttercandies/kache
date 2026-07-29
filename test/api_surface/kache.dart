@@ -39,7 +39,11 @@ void verifyKacheTypes({
   required KacheCommandException commandError,
   required KacheEvent event,
   required KacheEventKind eventKind,
-  required KacheCacheLayer cacheLayer,
+  required KacheEventPhase eventPhase,
+  required KacheEventTrigger eventTrigger,
+  required KacheLayer layer,
+  required KacheLookupResult lookup,
+  required KacheCancelReason cancelReason,
   required KacheCancellationToken cancellation,
   required KacheCancellationController cancellationController,
   required KacheCancelledException cancellationError,
@@ -53,6 +57,8 @@ void verifyKacheTypes({
   client.pauseReconnect();
   client.resumeReconnect();
   client.revalidateOnReconnect();
+  client.cancel(key);
+  client.cancelAll();
   client.networkState;
   policy.refreshInterval;
   policy.refreshOnReconnect;
@@ -62,6 +68,37 @@ void verifyKacheTypes({
   snapshot.isStale;
   snapshot.hasFailure;
   event.layer;
+  event.clientId;
+  event.sequence;
+  event.traceId;
+  event.id;
+  event.parentId;
+  event.kind;
+  event.phase;
+  event.trigger;
+  event.occurredAt;
+  event.duration;
+  event.key;
+  event.namespace;
+  event.debugName;
+  event.metadata;
+  event.lookup;
+  event.networkState;
+  event.failure;
+  event.cancelReason;
+  event.revision;
+  event.hasData;
+  event.dataOrNull;
+  event.requireData<int>();
+  event.scope;
+  event.isTerminal;
+  resource.cancel();
+  cancellation.isCancelled;
+  cancellation.reason;
+  cancellation.whenCancelled;
+  cancellationController.token;
+  cancellationController.cancel();
+  cancellationError.reason;
 }
 
 KacheClock verifyClock(KacheClock clock) => clock;

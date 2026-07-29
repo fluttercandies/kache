@@ -68,7 +68,8 @@ Future<void> observeUser(UserApi api, String userId) async {
 ## KacheCubit
 
 `KacheCubit<T>` owns one core resource and emits snapshots from it. Commands
-include `load`, `refresh`, `setData`, `updateData`, `invalidate`, and `remove`.
+include `load`, `refresh`, `setData`, `updateData`, `invalidate`, `remove`, and
+key-scoped `cancel`.
 Closing the Cubit cancels its subscription and releases the resource, but never
 closes the supplied client.
 

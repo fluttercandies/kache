@@ -2,6 +2,21 @@ import 'package:kache/kache.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('client ids are non-empty, stable, and unique by default', () async {
+    final first = KacheClient();
+    final second = KacheClient();
+
+    expect(first.id, isNotEmpty);
+    expect(second.id, isNot(first.id));
+    expect(
+      () => KacheClient(id: '  '),
+      throwsA(isA<KacheConfigurationException>()),
+    );
+
+    await first.close();
+    await second.close();
+  });
+
   test('rejects persisted queries when the client has no backend', () {
     final backend = MemoryKachePersistence();
     final query = KacheQuery<String>.persisted(

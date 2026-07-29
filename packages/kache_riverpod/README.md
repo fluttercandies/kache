@@ -104,7 +104,7 @@ error.
 ## Commands and lifecycle
 
 Use the notifier to call `load`, `refresh`, `setData`, `updateData`,
-`invalidate`, or `remove`. Inside widget `build`, watch `provider.notifier`
+`invalidate`, `remove`, or key-scoped `cancel`. Inside widget `build`, watch `provider.notifier`
 when the notifier or one of its properties contributes to rendered output.
 For a command used only by an event, read the notifier inside that event
 handler. This follows Riverpod's guidance against capturing `ref.read` values
@@ -121,6 +121,8 @@ the provider and resource identity and only forces a Kache fetch.
 `refreshInterval` works while the provider keeps its resource active. In pure
 Dart hosts, the client owner controls background timers with `pausePolling()`
 and `resumePolling()`.
+Cancelling a shared fetch does not invalidate the Riverpod provider or release
+its resource, and late non-cooperative results cannot write state back.
 
 ## Riverpod interoperability
 

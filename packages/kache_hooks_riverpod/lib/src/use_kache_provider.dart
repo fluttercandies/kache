@@ -45,6 +45,9 @@ final class KacheProviderBinding<T> {
   /// Removes current memory and persisted data.
   Future<KacheSnapshot<T>> remove() => notifier.remove();
 
+  /// Cancels the shared in-flight fetch for the current key.
+  bool cancel() => notifier.cancel();
+
   /// Keeps an auto-dispose provider alive without changing Kache GC policy.
   void keepAlive() => notifier.keepAlive();
 

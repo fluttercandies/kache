@@ -92,13 +92,17 @@ query。
   返回前台。
 - `KacheBuilder<T>` 拥有一个 `KacheController<T>`，根据完整快照重建。
 - `KacheListener<T>` 执行副作用，不重建 child。
-- `KacheController<T>` 实现 `ValueListenable<KacheSnapshot<T>>`，并暴露所有资源命令。
+- `KacheController<T>` 实现 `ValueListenable<KacheSnapshot<T>>`，并暴露所有资源命令，
+  包括取消当前 key 共享 fetch 的 `cancel()`。
 
 `HookWidget` 使用独立的 `kache_flutter_hooks` 包。它的 `useKache(query)` 返回同一个
 controller 类型，不增加第二套状态模型。
 
 Widget 收到相同 key 的新 query 时，controller 只更新 handle 的 fetcher 和 policy，不会
 丢失共享数据；key 改变时会释放旧 handle 并绑定新资源。
+
+同 key controller 共享一次核心 fetch，因此取消按 key 生效。取消会恢复请求前快照，
+不会释放 controller；无法协作停止的 Future 即使迟到，也会被核心永久隔离。
 
 ## 所有权
 

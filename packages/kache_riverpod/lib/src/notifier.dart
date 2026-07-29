@@ -103,6 +103,9 @@ final class KacheNotifier<T> extends Notifier<KacheSnapshot<T>> {
   /// Removes current memory and persisted data without fetching.
   Future<KacheSnapshot<T>> remove() => _requireResource().remove();
 
+  /// Cancels the shared in-flight fetch for the current key.
+  bool cancel() => _requireResource().cancel();
+
   /// Keeps an auto-dispose provider alive after its final listener is removed.
   void keepAlive() {
     _ensureMounted();

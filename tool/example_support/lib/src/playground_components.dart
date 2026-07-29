@@ -111,6 +111,7 @@ String playgroundFailureKindLabel(KacheFailureKind? kind) {
     KacheFailureKind.fetchUnavailable => 'Fetch unavailable',
     KacheFailureKind.persistenceRead => 'Persistence read',
     KacheFailureKind.persistenceWrite => 'Persistence write',
+    KacheFailureKind.persistenceClose => 'Persistence close',
     KacheFailureKind.fetch => 'Fetch',
     KacheFailureKind.delete => 'Delete',
     KacheFailureKind.clear => 'Clear',

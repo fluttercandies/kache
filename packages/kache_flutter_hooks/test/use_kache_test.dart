@@ -6,6 +6,47 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kache_flutter_hooks/kache_flutter_hooks.dart';
 
 void main() {
+  testWidgets('hook controller cancels a pending shared fetch', (tester) async {
+    final client = KacheClient();
+    final gate = Completer<String>();
+    KacheController<String>? controller;
+
+    try {
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: _HookView<String>(
+            client: client,
+            query: KacheQuery<String>.memory(
+              key: KacheKey('hooks', <Object?>['cancel']),
+              fetch: (_) => gate.future,
+            ),
+            onBuild: (value) => controller = value,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('loading'), findsOneWidget);
+
+      expect(controller!.cancel(), isTrue);
+      await tester.pump();
+      expect(controller!.value.phase, KachePhase.idle);
+      await tester.pump();
+      expect(find.text('idle'), findsOneWidget);
+
+      gate.complete('late');
+      await gate.future;
+      await tester.pump();
+      expect(find.text('idle'), findsOneWidget);
+    } finally {
+      if (!gate.isCompleted) {
+        gate.complete('late');
+      }
+      await tester.pumpWidget(const SizedBox());
+      await client.close();
+    }
+  });
+
   testWidgets(
     'scope client loads once and same-key updates keep the controller',
     (tester) async {

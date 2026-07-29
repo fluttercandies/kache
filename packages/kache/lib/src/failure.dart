@@ -18,6 +18,9 @@ enum KacheFailureKind {
   /// Persistence failed while encoding or writing a value.
   persistenceWrite,
 
+  /// An owned persistence backend failed while closing.
+  persistenceClose,
+
   /// A query fetcher failed.
   fetch,
 
@@ -30,7 +33,7 @@ enum KacheFailureKind {
   /// A network availability source failed.
   connectivity,
 
-  /// An operation was cancelled or used after lifecycle shutdown.
+  /// A resource, client, or owned dependency lifecycle operation failed.
   lifecycle,
 }
 
@@ -71,6 +74,7 @@ final class KacheFailure {
       throw ArgumentError('Only clear failures may target a namespace.');
     }
     final allowsGlobalScope = kind == KacheFailureKind.clear ||
+        kind == KacheFailureKind.persistenceClose ||
         kind == KacheFailureKind.connectivity ||
         kind == KacheFailureKind.lifecycle ||
         kind == KacheFailureKind.configuration;
@@ -81,6 +85,7 @@ final class KacheFailure {
     }
     final isPersistence = kind == KacheFailureKind.persistenceRead ||
         kind == KacheFailureKind.persistenceWrite ||
+        kind == KacheFailureKind.persistenceClose ||
         kind == KacheFailureKind.delete ||
         kind == KacheFailureKind.clear;
     if (!isPersistence && persistenceStage != null) {

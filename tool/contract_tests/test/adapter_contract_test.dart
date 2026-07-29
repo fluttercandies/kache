@@ -46,6 +46,9 @@ final class _FlutterHarness implements AdapterContractHarness {
   Future<KacheSnapshot<int>> refresh() => _controller.refresh();
 
   @override
+  bool cancel() => _controller.cancel();
+
+  @override
   Future<KacheSnapshot<int>> invalidate({required bool refetch}) =>
       _controller.invalidate(refetch: refetch);
 
@@ -111,6 +114,9 @@ final class _ProviderHarness implements AdapterContractHarness {
 
   @override
   Future<KacheSnapshot<int>> refresh() => _controller.refresh();
+
+  @override
+  bool cancel() => _controller.cancel();
 
   @override
   Future<KacheSnapshot<int>> invalidate({required bool refetch}) =>
@@ -187,6 +193,9 @@ final class _RiverpodHarness implements AdapterContractHarness {
   Future<KacheSnapshot<int>> refresh() => _notifier.refresh();
 
   @override
+  bool cancel() => _notifier.cancel();
+
+  @override
   Future<KacheSnapshot<int>> invalidate({required bool refetch}) =>
       _notifier.invalidate(refetch: refetch);
 
@@ -245,6 +254,9 @@ final class _CubitHarness implements AdapterContractHarness {
 
   @override
   Future<KacheSnapshot<int>> refresh() => _cubit.refresh();
+
+  @override
+  bool cancel() => _cubit.cancel();
 
   @override
   Future<KacheSnapshot<int>> invalidate({required bool refetch}) =>

@@ -5,11 +5,13 @@ final class _KacheOperationVersion {
     required this.generation,
     required this.globalEpoch,
     required this.namespaceEpoch,
+    required this.cancellation,
   });
 
   final int generation;
   final int globalEpoch;
   final int namespaceEpoch;
+  final KacheCancellationToken cancellation;
 }
 
 final class _KacheWriteQueue {

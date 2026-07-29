@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -6,6 +7,53 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:kache_hooks_riverpod/kache_hooks_riverpod.dart';
 
 void main() {
+  testWidgets('hook binding cancels a pending provider fetch', (tester) async {
+    final client = KacheClient();
+    final gate = Completer<int>();
+    final provider = kacheProvider<int>(
+      client: (_) => client,
+      query: (_) => KacheQuery<int>.memory(
+        key: KacheKey('hooks-riverpod', <Object?>['cancel']),
+        fetch: (_) => gate.future,
+      ),
+    );
+    KacheProviderBinding<int>? binding;
+
+    try {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: _BindingView<int>(
+              provider: provider,
+              onBuild: (value) => binding = value,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('loading'), findsOneWidget);
+
+      expect(binding!.cancel(), isTrue);
+      await tester.pump();
+      expect(binding!.notifier.state.phase, KachePhase.idle);
+      await tester.pump();
+      expect(find.text('idle'), findsOneWidget);
+
+      gate.complete(1);
+      await gate.future;
+      await tester.pump();
+      expect(find.text('idle'), findsOneWidget);
+    } finally {
+      if (!gate.isCompleted) {
+        gate.complete(1);
+      }
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      await client.close();
+    }
+  });
+
   testWidgets('hook watches one provider resource and delegates commands', (
     tester,
   ) async {

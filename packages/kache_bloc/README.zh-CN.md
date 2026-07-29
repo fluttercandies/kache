@@ -68,7 +68,8 @@ Future<void> observeUser(UserApi api, String userId) async {
 ## KacheCubit
 
 `KacheCubit<T>` 拥有一个核心 resource，并发出它的快照。命令包括 `load`、
-`refresh`、`setData`、`updateData`、`invalidate` 和 `remove`。关闭 Cubit 会取消
+`refresh`、`setData`、`updateData`、`invalidate`、`remove` 和按 key 生效的
+`cancel`。关闭 Cubit 会取消
 订阅并释放 resource，但不会关闭传入的 client。
 
 `refresh` 返回 `Future<KacheSnapshot<T>>`，命令式调用方可以检查完成后的状态。使用

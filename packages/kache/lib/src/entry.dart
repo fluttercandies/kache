@@ -11,6 +11,8 @@ abstract class _KacheEntryBase {
 
   bool get canCollect;
 
+  bool cancelFetch(KacheCancelReason reason);
+
   void prepareForClear();
 
   void completeClear();
@@ -24,6 +26,52 @@ abstract class _KacheEntryBase {
   Future<void> drainForClose();
 
   Future<void> finishClose();
+}
+
+sealed class _KacheFetchOutcome<T> {
+  const _KacheFetchOutcome();
+}
+
+final class _KacheFetchValue<T> extends _KacheFetchOutcome<T> {
+  const _KacheFetchValue(this.data);
+
+  final T data;
+}
+
+final class _KacheFetchError<T> extends _KacheFetchOutcome<T> {
+  const _KacheFetchError(this.error, this.stackTrace);
+
+  final Object error;
+  final StackTrace stackTrace;
+}
+
+final class _KacheFetchCancelled<T> extends _KacheFetchOutcome<T> {
+  const _KacheFetchCancelled(this.reason);
+
+  final KacheCancelReason reason;
+}
+
+sealed class _KacheReadOutcome<T> {
+  const _KacheReadOutcome();
+}
+
+final class _KacheReadValue<T> extends _KacheReadOutcome<T> {
+  const _KacheReadValue(this.read);
+
+  final KachePersistenceRead<T>? read;
+}
+
+final class _KacheReadError<T> extends _KacheReadOutcome<T> {
+  const _KacheReadError(this.error, this.stackTrace);
+
+  final Object error;
+  final StackTrace stackTrace;
+}
+
+final class _KacheReadCancelled<T> extends _KacheReadOutcome<T> {
+  const _KacheReadCancelled(this.reason);
+
+  final KacheCancelReason reason;
 }
 
 final class _KacheEntry<T> implements _KacheEntryBase {
@@ -59,10 +107,13 @@ final class _KacheEntry<T> implements _KacheEntryBase {
       StreamController<KacheSnapshot<T>>.broadcast(sync: true);
   KacheSnapshot<T> _snapshot;
   Future<void>? _readFuture;
+  Future<void>? _readBackendFuture;
   Future<KacheSnapshot<T>>? _fetchFuture;
+  Future<KacheSnapshot<T>>? _closeFetchFuture;
   Future<void>? _maintenanceFuture;
   DateTime? _lastFetchFinishedAt;
   KacheCancellationController? _fetchCancellation;
+  KacheSnapshot<T>? _fetchFallback;
   late final _KacheWriteQueue _writes;
   KacheScheduledTask? _gcTask;
   bool _didReadPersistence;
@@ -76,6 +127,8 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   int _activeLoads = 0;
   Duration _maximumGcAfter = Duration.zero;
   int _generation = 0;
+  KacheCancellationController _generationCancellation =
+      KacheCancellationController();
 
   KacheSnapshot<T> get snapshot => _snapshot;
 
@@ -118,16 +171,28 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     }
   }
 
-  Future<KacheSnapshot<T>> load(KacheQuery<T> query) {
+  _KacheEventContext _eventContext(KacheQuery<T> query) => _KacheEventContext(
+        key: key,
+        debugName: query.debugName,
+        metadata: query.metadata,
+      );
+
+  Future<KacheSnapshot<T>> load(
+    KacheQuery<T> query, {
+    required _KacheTrace trace,
+  }) {
     _ensureCommandAvailable();
     _activeLoads += 1;
-    return _performLoad(query).whenComplete(() {
+    return _performLoad(query, trace).whenComplete(() {
       _activeLoads -= 1;
       _operationSettled();
     });
   }
 
-  Future<KacheSnapshot<T>> refresh(KacheQuery<T> query) {
+  Future<KacheSnapshot<T>> refresh(
+    KacheQuery<T> query, {
+    required _KacheTrace trace,
+  }) {
     _ensureCommandAvailable();
     final fetcher = query.fetch;
     if (fetcher == null) {
@@ -140,21 +205,25 @@ final class _KacheEntry<T> implements _KacheEntryBase {
       _emitOperationFailure(
         failure,
         query.policy.retainDataOnError,
-        debugName: query.debugName,
       );
+      trace
+          .span(KacheEventKind.fetch, context: _eventContext(query))
+          .fail(failure, revision: _snapshot.revision);
       return Future<KacheSnapshot<T>>.value(_snapshot);
     }
-    return _fetch(query, fetcher);
+    return _fetch(query, fetcher, trace);
   }
 
   Future<KacheSnapshot<T>> revalidate(
     KacheQuery<T> query,
-    KacheRevalidation mode,
-  ) async {
+    KacheRevalidation mode, {
+    required _KacheTrace trace,
+  }) async {
     _ensureCommandAvailable();
     final classification = await _expireExisting(
       query.policy,
-      debugName: query.debugName,
+      query: query,
+      trace: trace,
     );
     if (query.policy.isCacheOnly || mode == KacheRevalidation.never) {
       return _snapshot;
@@ -162,17 +231,21 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     final shouldFetch = !_snapshot.hasData ||
         mode == KacheRevalidation.always ||
         classification.freshness == KacheFreshness.stale;
-    return shouldFetch ? refresh(query) : _snapshot;
+    return shouldFetch ? refresh(query, trace: trace) : _snapshot;
   }
 
-  Future<KacheSnapshot<T>> _performLoad(KacheQuery<T> query) async {
-    final readPersistence = await _awaitInitialRead(query);
+  Future<KacheSnapshot<T>> _performLoad(
+    KacheQuery<T> query,
+    _KacheTrace trace,
+  ) async {
+    final readPersistence = await _awaitInitialRead(query, trace);
     if (_isClosed || client.isClosed) {
       return _snapshot;
     }
     final classification = await _expireExisting(
       query.policy,
-      debugName: query.debugName,
+      query: query,
+      trace: trace,
     );
     if (_isClosed || client.isClosed) {
       return _snapshot;
@@ -180,14 +253,23 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     if (!readPersistence &&
         !classification.expired &&
         storageMode != KacheStorageMode.none) {
-      client._emitEvent(
-        kind: _snapshot.hasData
-            ? KacheEventKind.cacheHit
-            : KacheEventKind.cacheMiss,
-        key: key,
-        debugName: query.debugName,
-        layer: KacheCacheLayer.memory,
+      final lookup = trace.span(
+        KacheEventKind.lookup,
+        layer: KacheLayer.memory,
+        context: _eventContext(query),
       );
+      if (_snapshot.hasData) {
+        lookup.succeed(
+          lookup: KacheLookupResult.hit,
+          revision: _snapshot.revision,
+          data: _snapshot.requireData,
+        );
+      } else {
+        lookup.succeed(
+          lookup: KacheLookupResult.miss,
+          revision: _snapshot.revision,
+        );
+      }
     }
 
     final hasData = _snapshot.hasData;
@@ -197,7 +279,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         await maintenance;
       }
       if (!_snapshot.hasData) {
-        _emitCacheMiss(debugName: query.debugName);
+        _emitCacheMiss(_cacheMissFailure());
       }
       return _snapshot;
     }
@@ -210,7 +292,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
           KacheRevalidation.always => true,
         };
     if (shouldFetch) {
-      return _fetch(query, query.fetch!);
+      return _fetch(query, query.fetch!, trace);
     }
     final maintenance = _maintenanceFuture;
     if (maintenance != null) {
@@ -219,17 +301,20 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     return _snapshot;
   }
 
-  Future<bool> _awaitInitialRead(KacheQuery<T> query) async {
+  Future<bool> _awaitInitialRead(
+    KacheQuery<T> query,
+    _KacheTrace trace,
+  ) async {
     final existing = _readFuture;
     if (existing != null) {
       await existing;
-      return true;
+      return false;
     }
     if (_didReadPersistence) {
       return false;
     }
     late final Future<void> tracked;
-    tracked = _readPersistence(query).whenComplete(() {
+    tracked = _readPersistence(query, trace).whenComplete(() {
       if (identical(_readFuture, tracked)) {
         _readFuture = null;
       }
@@ -241,7 +326,8 @@ final class _KacheEntry<T> implements _KacheEntryBase {
 
   Future<({bool expired, KacheFreshness? freshness})> _expireExisting(
     KachePolicy policy, {
-    String? debugName,
+    required KacheQuery<T> query,
+    required _KacheTrace trace,
   }) async {
     if (!_snapshot.hasData) {
       return (expired: false, freshness: null);
@@ -252,18 +338,32 @@ final class _KacheEntry<T> implements _KacheEntryBase {
       isInvalidated: _isInvalidated,
     );
     if (freshness == null) {
-      client._emitEvent(
-        kind: KacheEventKind.cacheExpired,
-        key: key,
-        debugName: debugName,
-        layer: KacheCacheLayer.memory,
-      );
       if (storageMode == KacheStorageMode.persisted) {
         final version = _captureVersion();
         _emitEmpty(const KachePersistenceState.writing());
-        await _deletePersisted(version);
+        trace
+            .span(
+              KacheEventKind.lookup,
+              layer: KacheLayer.memory,
+              context: _eventContext(query),
+            )
+            .succeed(
+              lookup: KacheLookupResult.expired,
+              revision: _snapshot.revision,
+            );
+        await _deletePersisted(version, trace: trace, query: query);
       } else {
         _emitEmpty(null);
+        trace
+            .span(
+              KacheEventKind.lookup,
+              layer: KacheLayer.memory,
+              context: _eventContext(query),
+            )
+            .succeed(
+              lookup: KacheLookupResult.expired,
+              revision: _snapshot.revision,
+            );
       }
       _isInvalidated = false;
       return (expired: true, freshness: null);
@@ -284,6 +384,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   Future<KacheSnapshot<T>> _fetch(
     KacheQuery<T> query,
     KacheFetcher<T> fetcher,
+    _KacheTrace trace,
   ) {
     final existing = _fetchFuture;
     if (existing != null) {
@@ -291,7 +392,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     }
     late final Future<KacheSnapshot<T>> tracked;
     _activeFetches += 1;
-    tracked = _performFetch(query, fetcher).whenComplete(() {
+    tracked = _performFetch(query, fetcher, trace).whenComplete(() {
       _lastFetchFinishedAt = client._now();
       if (identical(_fetchFuture, tracked)) {
         _fetchFuture = null;
@@ -307,15 +408,13 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   Future<KacheSnapshot<T>> _performFetch(
     KacheQuery<T> query,
     KacheFetcher<T> fetcher,
+    _KacheTrace trace,
   ) async {
     final version = _captureVersion();
     final cancellation = KacheCancellationController();
+    final fallback = _snapshot;
     _fetchCancellation = cancellation;
-    client._emitEvent(
-      kind: KacheEventKind.fetchStarted,
-      key: key,
-      debugName: query.debugName,
-    );
+    _fetchFallback = fallback;
     if (_snapshot.hasData) {
       _emitReady(
         data: _snapshot.requireData,
@@ -328,74 +427,135 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     } else {
       _emitLoading(_snapshot.persistence);
     }
+    final span = trace.span(
+      KacheEventKind.fetch,
+      context: _eventContext(query),
+    )..start(revision: _snapshot.revision);
 
-    try {
-      final data = await Future<T>.sync(
-        () => fetcher(KacheFetchContext(cancellation: cancellation.token)),
-      );
-      cancellation.token.throwIfCancelled();
-      if (!_isCurrent(version)) {
-        return _snapshot;
-      }
-      final fetchedAt = client._now();
-      _isInvalidated = false;
-      final persistence = storageMode == KacheStorageMode.persisted
-          ? const KachePersistenceState.writing()
-          : null;
-      _emitReady(
-        data: data,
-        freshness: KacheFreshness.fresh,
-        source: KacheDataSource.fetch,
-        fetchedAt: fetchedAt,
-        persistence: persistence,
-      );
-      client._emitEvent(
-        kind: KacheEventKind.fetchSucceeded,
-        key: key,
-        debugName: query.debugName,
-      );
-      if (storageMode == KacheStorageMode.persisted) {
-        await _writePersisted(
-          data,
-          fetchedAt,
-          version: version,
-          isInvalidated: false,
+    final fetch = Future<T>.sync(
+      () => fetcher(KacheFetchContext(cancellation: cancellation.token)),
+    ).then<_KacheFetchOutcome<T>>(
+      _KacheFetchValue<T>.new,
+      onError: (Object error, StackTrace stackTrace) =>
+          _KacheFetchError<T>(error, stackTrace),
+    );
+    final cancelled = cancellation.token.whenCancelled
+        .then<_KacheFetchOutcome<T>>(_KacheFetchCancelled<T>.new);
+    final outcome = await Future.any<_KacheFetchOutcome<T>>(
+      <Future<_KacheFetchOutcome<T>>>[fetch, cancelled],
+    );
+
+    switch (outcome) {
+      case _KacheFetchCancelled<T>(:final reason):
+        span.cancel(reason, revision: _snapshot.revision);
+        break;
+      case _KacheFetchError<T>(:final error, :final stackTrace):
+        if (error case final KacheCancelledException cancelledError) {
+          cancelFetch(cancelledError.reason);
+          span.cancel(cancelledError.reason, revision: _snapshot.revision);
+        } else if (!_isCurrent(version)) {
+          span.cancel(
+            version.cancellation.reason ?? KacheCancelReason.close,
+            revision: _snapshot.revision,
+          );
+        } else {
+          final failure = KacheFailure(
+            kind: KacheFailureKind.fetch,
+            key: key,
+            cause: error,
+            stackTrace: stackTrace,
+          );
+          _emitOperationFailure(failure, query.policy.retainDataOnError);
+          span.fail(failure, revision: _snapshot.revision);
+        }
+        break;
+      case _KacheFetchValue<T>(:final data):
+        if (!_isCurrent(version) || cancellation.token.isCancelled) {
+          span.cancel(
+            cancellation.token.reason ?? KacheCancelReason.close,
+            revision: _snapshot.revision,
+          );
+          break;
+        }
+        if (identical(_fetchCancellation, cancellation)) {
+          _fetchCancellation = null;
+          _fetchFallback = null;
+        }
+        final fetchedAt = client._now();
+        _isInvalidated = false;
+        final persistence = storageMode == KacheStorageMode.persisted
+            ? const KachePersistenceState.writing()
+            : null;
+        _emitReady(
+          data: data,
+          freshness: KacheFreshness.fresh,
+          source: KacheDataSource.fetch,
+          fetchedAt: fetchedAt,
+          persistence: persistence,
         );
-      }
-    } on KacheCancelledException {
-      return _snapshot;
-    } on Object catch (error, stackTrace) {
-      if (!_isCurrent(version)) {
-        return _snapshot;
-      }
-      final failure = KacheFailure(
-        kind: KacheFailureKind.fetch,
-        key: key,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-      _emitOperationFailure(
-        failure,
-        query.policy.retainDataOnError,
-        debugName: query.debugName,
-      );
+        span.succeed(revision: _snapshot.revision, data: data);
+        if (storageMode == KacheStorageMode.persisted) {
+          await _writePersisted(
+            data,
+            fetchedAt,
+            version: version,
+            isInvalidated: false,
+            trace: trace,
+            query: query,
+          );
+        }
+        break;
     }
     return _snapshot;
   }
 
   _KacheOperationVersion _captureVersion() =>
-      client._captureVersion(key, _generation);
+      client._captureVersion(key, _generation, _generationCancellation.token);
 
   bool _isCurrent(_KacheOperationVersion version) =>
       !_isClosed &&
       version.generation == _generation &&
       client._isEpochCurrent(key, version);
 
-  void _advanceGeneration() {
+  void _advanceGeneration(KacheCancelReason reason) {
+    final generationCancellation = _generationCancellation;
+    final fetchCancellation = _fetchCancellation;
     _generation += 1;
-    _fetchCancellation?.cancel();
+    _generationCancellation = KacheCancellationController();
     _fetchCancellation = null;
+    _fetchFallback = null;
     _fetchFuture = null;
+    generationCancellation.cancel(reason);
+    fetchCancellation?.cancel(reason);
+  }
+
+  @override
+  bool cancelFetch(KacheCancelReason reason) {
+    final cancellation = _fetchCancellation;
+    final generationCancellation = _generationCancellation;
+    final fallback = _fetchFallback;
+    if (cancellation == null || fallback == null) {
+      return false;
+    }
+    _generation += 1;
+    _generationCancellation = KacheCancellationController();
+    _fetchCancellation = null;
+    _fetchFallback = null;
+    _fetchFuture = null;
+    if (reason == KacheCancelReason.manual) {
+      _restoreSnapshot(fallback);
+    }
+    generationCancellation.cancel(reason);
+    cancellation.cancel(reason);
+    return true;
+  }
+
+  void _cancelFetchOnly(KacheCancelReason reason) {
+    final cancellation = _fetchCancellation;
+    _fetchCancellation = null;
+    _fetchFallback = null;
+    _fetchFuture = null;
+    cancellation?.cancel(reason);
   }
 
   void _operationSettled() {
@@ -416,7 +576,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   @override
   void prepareForClear() {
     _pendingClears += 1;
-    _advanceGeneration();
+    _advanceGeneration(KacheCancelReason.clear);
     _didReadPersistence = true;
     _isInvalidated = false;
     _emitEmpty(
@@ -453,14 +613,23 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   void prepareForClientClose({required bool cancelPendingWrites}) {
     _gcTask?.cancel();
     _gcTask = null;
-    _fetchCancellation?.cancel();
+    _closeFetchFuture = _fetchFuture;
     if (cancelPendingWrites) {
+      _advanceGeneration(KacheCancelReason.close);
       _writes.cancelPending();
+    } else {
+      _cancelFetchOnly(KacheCancelReason.close);
     }
   }
 
   @override
-  Future<void> drainForClose() => _writes.drain();
+  Future<void> drainForClose() async {
+    final fetch = _closeFetchFuture;
+    if (fetch != null) {
+      await fetch;
+    }
+    await _writes.drain();
+  }
 
   @override
   Future<void> finishClose() async {
@@ -468,7 +637,16 @@ final class _KacheEntry<T> implements _KacheEntryBase {
       return;
     }
     _isClosed = true;
-    _fetchCancellation?.cancel();
+    final read = _readFuture;
+    _cancelFetchOnly(KacheCancelReason.close);
+    _generationCancellation.cancel(KacheCancelReason.close);
+    if (read != null) {
+      await read;
+    }
+    final backendRead = _readBackendFuture;
+    if (backendRead != null) {
+      await backendRead;
+    }
     await _changes.close();
   }
 }

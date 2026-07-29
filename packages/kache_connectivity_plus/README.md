@@ -99,7 +99,7 @@ lost while the UI is in the background.
 | Apple | iOS >=12.0, macOS >=10.14, Xcode >=26.1.1 |
 
 Android, iOS, macOS, Linux, Windows, and Web are supported through
-connectivity_plus 7.3.0. Connectivity reports an available network interface,
+connectivity_plus 7.3.1 (with a compatible floor of 7.3.0). Connectivity reports an available network interface,
 not verified Internet reachability. Existing Android projects must satisfy the
 native build-tool requirements above even when their Flutter SDK constraint
 resolves successfully.

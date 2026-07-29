@@ -159,7 +159,9 @@ final class _ProviderPoliciesTabState extends State<_ProviderPoliciesTab> {
           ),
         ];
     _sub = client.events.listen((event) {
-      if (event.kind == KacheEventKind.fetchStarted && event.key != null) {
+      if (event.kind == KacheEventKind.fetch &&
+          event.phase == KacheEventPhase.started &&
+          event.key != null) {
         final k = event.key!.storageKey;
         if (mounted) {
           setState(() => _fetchCounts[k] = (_fetchCounts[k] ?? 0) + 1);

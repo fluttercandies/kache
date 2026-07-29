@@ -1,3 +1,9 @@
+## 2.0.0
+
+- Verified connectivity_plus 7.3.1 while retaining the compatible 7.3.0 floor.
+- Updated the Kache core range for typed network events, reconnect traces, and
+  paired owned-network close events.
+
 ## 1.2.0
 
 - Updated connectivity_plus to 7.3.0.

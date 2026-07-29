@@ -1,3 +1,8 @@
+## 2.0.0
+
+- Added key-scoped `cancel()` to `KacheBlocBinding` and `KacheCubit`.
+- Adopted the core 2.0 trace/span event and reasoned cancellation contracts.
+
 ## 1.2.0
 
 - Updated the Kache core compatibility range for the coordinated 1.2 release.

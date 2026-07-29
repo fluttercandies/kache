@@ -155,10 +155,16 @@ final class KacheQuery<T> {
   /// Freshness and lifecycle revalidation rules.
   final KachePolicy policy;
 
-  /// Optional caller-supplied non-sensitive observer label.
+  /// Optional caller-supplied observer label.
+  ///
+  /// This may contain sensitive application context and is never rendered by
+  /// Kache's sanitized event strings.
   final String? debugName;
 
-  /// Immutable caller-supplied non-sensitive observer metadata.
+  /// Immutable caller-supplied observer metadata.
+  ///
+  /// Values may be sensitive. They are exposed only through trusted
+  /// in-process events and are never rendered by Kache's sanitized strings.
   final Map<String, Object?> metadata;
 
   /// The reified Dart value type used for shared-key compatibility checks.

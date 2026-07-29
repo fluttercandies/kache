@@ -1,3 +1,9 @@
+## 2.0.0
+
+- Exposed key-scoped cancellation through the existing `KacheController`.
+- Adopted the core 2.0 event and cancellation contracts without duplicating
+  controller or resource state.
+
 ## 1.2.0
 
 - Updated the Kache Flutter compatibility range for the coordinated 1.2

@@ -1,3 +1,10 @@
+## 2.0.0
+
+- Updated the Kache core range for trace/span persistence events and reasoned
+  read/write/delete cancellation.
+- Kept native TypeAdapter records, byte envelopes, migrations, and on-disk
+  compatibility unchanged.
+
 ## 1.2.0
 
 - Updated the Kache core compatibility range for the coordinated 1.2 release.

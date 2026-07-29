@@ -1,3 +1,16 @@
+## 2.0.0
+
+- Replaced the legacy event enum with paired `kind`, `phase`, and `trigger`
+  operation events, trace/span correlation, timing, query context, revisions,
+  lookup/network details, and complete close failure reporting.
+- Made successful event data available to trusted in-process subscribers while
+  keeping event, failure, and cancellation string output sanitized.
+- Added `KacheResource.cancel`, `KacheClient.cancel`, and `cancelAll` with
+  reasoned cooperative cancellation, immediate logical completion, snapshot
+  restoration, and permanent isolation of late non-cooperative results.
+- Preserved deterministic single-flight, generation, clear, write-drain, and
+  owned dependency lifecycle semantics under cancellation and event reentry.
+
 ## 1.2.0
 
 - Aligned the core release with the new Flutter Hooks integration packages.

@@ -1,3 +1,9 @@
+## 2.0.0
+
+- Added `KacheController.cancel()` for the current key's shared fetch.
+- Adopted the core 2.0 trace/span event and reasoned cancellation contracts.
+- Preserved controller key-generation isolation and Flutter lifecycle behavior.
+
 ## 1.2.0
 
 - Added the supported foundation for `kache_flutter_hooks` while preserving

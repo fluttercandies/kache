@@ -1,3 +1,11 @@
+## 2.0.0
+
+- Added `KacheProviderBinding.cancel()` without creating a second resource or
+  cancellation state.
+- Verified HookConsumerWidget lifecycle and provider rebuild behavior with
+  Hooks Riverpod 3.4.2.
+- Adopted the core 2.0 event and cancellation contracts.
+
 ## 1.2.0
 
 - Added `useKacheProvider` for consuming existing Kache providers from

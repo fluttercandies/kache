@@ -48,10 +48,10 @@ const _publishedFlutterConstraints = <String, String>{
 };
 
 void main() {
-  test('workspace package versions are aligned for the minor release', () {
+  test('workspace package versions are aligned for the major release', () {
     for (final path in _workspacePackagePaths) {
       final pubspec = _pubspec(path);
-      expect(pubspec['version'], '1.2.0', reason: path);
+      expect(pubspec['version'], '2.0.0', reason: path);
     }
   });
 
@@ -158,11 +158,30 @@ void main() {
       'kache_provider',
       'kache_riverpod',
     ]) {
-      _expectDependency('.', dependency, '^1.2.0', dev: true);
+      _expectDependency('.', dependency, '^2.0.0', dev: true);
     }
   });
 
-  test('every internal published dependency accepts the minor release', () {
+  test('current stable lock verifies the latest compatible adapters', () {
+    final packages =
+        (loadYaml(File('pubspec.lock').readAsStringSync())
+                as YamlMap)['packages']
+            as YamlMap;
+    for (final entry in const <String, String>{
+      'connectivity_plus': '7.3.1',
+      'flutter_riverpod': '3.4.2',
+      'hooks_riverpod': '3.4.2',
+      'riverpod': '3.4.2',
+    }.entries) {
+      expect(
+        (packages[entry.key] as YamlMap)['version'],
+        entry.value,
+        reason: entry.key,
+      );
+    }
+  });
+
+  test('every internal published dependency accepts the major release', () {
     for (final entry in const <(String, String)>[
       ('packages/kache_flutter', 'kache'),
       ('packages/kache_flutter_hooks', 'kache_flutter'),
@@ -173,7 +192,7 @@ void main() {
       ('packages/kache_connectivity_plus', 'kache'),
       ('packages/kache_provider', 'kache_flutter'),
     ]) {
-      _expectDependency(entry.$1, entry.$2, '^1.2.0');
+      _expectDependency(entry.$1, entry.$2, '^2.0.0');
     }
   });
 
@@ -216,11 +235,11 @@ void main() {
     }
   });
 
-  test('every published changelog starts with the minor release', () {
+  test('every published changelog starts with the major release', () {
     for (final path in _packagePaths) {
       expect(
         File('$path/CHANGELOG.md').readAsStringSync(),
-        startsWith('## 1.2.0\n'),
+        startsWith('## 2.0.0\n'),
         reason: path,
       );
     }

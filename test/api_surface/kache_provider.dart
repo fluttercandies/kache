@@ -15,3 +15,6 @@ KacheSnapshot<int> verifyWatchExtension(BuildContext context) =>
 Future<KacheSnapshot<int>> verifyProviderControllerRefresh(
   KacheController<int> controller,
 ) => controller.refresh();
+
+bool verifyProviderControllerCancel(KacheController<int> controller) =>
+    controller.cancel();

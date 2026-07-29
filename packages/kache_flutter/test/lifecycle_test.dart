@@ -134,7 +134,9 @@ void main() {
     expect(fetches, 0);
 
     final reconnectCompleted = client.events.firstWhere(
-      (event) => event.kind == KacheEventKind.reconnectCompleted,
+      (event) =>
+          event.kind == KacheEventKind.reconnect &&
+          event.phase == KacheEventPhase.succeeded,
     );
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();

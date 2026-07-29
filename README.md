@@ -205,9 +205,32 @@ stack trace while its `toString()` stays sanitized. Command-oriented code can
 call `snapshot.throwIfFailed()` or `clearResult.throwIfFailed()`.
 
 Subscribe to `KacheClient.events` or provide an observer for logging and
-telemetry. Events never include payloads or raw key values by default.
-`cacheHit`, `cacheMiss`, and `cacheExpired` identify their `memory` or
-`persistence` layer without changing resource state.
+telemetry. This is a trusted in-process domain channel, not a pre-redacted log
+DTO: successful cache hits, reads, fetches, writes, and sets can expose the
+original object through `hasData`, `dataOrNull`, and `requireData<T>()`. Query
+keys and immutable metadata are also available for application-owned routing.
+
+Kache never prints or uploads events. `KacheEvent.toString()` omits data, keys,
+metadata, causes, and stack traces. Subscribers decide what to filter, map,
+redact, print, or export with standard stream operators. `kind`, `phase`, and
+`trigger` describe the operation; `traceId`, `id`, and `parentId` correlate
+spans; `clientId` and `sequence` preserve per-client order.
+
+## Cancellation
+
+`resource.cancel()` cancels the active shared fetch for its key.
+`client.cancel(key)` does the same without a handle, and `client.cancelAll()`
+returns the number of keys cancelled. Because same-key callers share one
+single-flight request, cancellation affects every waiter for that key. It does
+not remove cached data, dispose handles, or disable future polling.
+
+Cancellation is logically immediate even when a fetcher returns a Future that
+cannot be physically stopped: the visible snapshot is restored and late values
+or errors are isolated. Fetchers receive `context.cancellation`; bridge
+`whenCancelled` to the HTTP client's cancel token or abort controller, then
+call `context.throwIfCancelled()` after awaited work for cooperative physical
+cancellation. Automatic supersession reports a precise reason such as
+`dataSet`, `invalidate`, `remove`, `clear`, or `close`.
 
 ## Lifecycle
 
@@ -243,6 +266,8 @@ Official adapters track Hive CE `>=2.19.3 <3.0.0`, connectivity_plus
 `>=7.3.0 <8.0.0`, Riverpod `>=3.3.2 <4.0.0`, Flutter Hooks
 `>=0.21.3+1 <0.22.0`, Hooks Riverpod `>=3.3.2 <4.0.0`, Bloc
 `>=9.2.1 <10.0.0`, and Provider `>=6.1.5+1 <7.0.0`.
+The current stable workspace verifies Riverpod/Hooks Riverpod 3.4.2 and
+connectivity_plus 7.3.1 while retaining lower compatible resolver floors.
 
 ## Examples
 

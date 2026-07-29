@@ -77,7 +77,7 @@ Widget createProfileApp() {
 keep-alive、observer 和 provider subscription 都保持原生行为。
 
 返回的 `KacheProviderBinding<T>` 包含当前 build watch 的 snapshot 与
-notifier，以及 `load`、`refresh`、`setData`、`updateData`、`invalidate`、`remove`、
+notifier，以及 `load`、`refresh`、`setData`、`updateData`、`invalidate`、`remove`、`cancel`、
 `keepAlive` 和 `releaseKeepAlive` 代理。
 
 快速开始中的 `clientProvider` 会在嵌套 `ProviderScope` 中被 override，因此显式

@@ -187,9 +187,27 @@ codec binding 获得独立 schema 控制。
 失败。`KacheFailure` 保留原始异常和堆栈，但 `toString()` 会脱敏。命令式代码可调用
 `snapshot.throwIfFailed()` 或 `clearResult.throwIfFailed()`。
 
-日志和遥测可以订阅 `KacheClient.events` 或注入 observer。事件默认不包含 payload
-或原始 key 值。`cacheHit`、`cacheMiss` 和 `cacheExpired` 会标明 `memory` 或
-`persistence` layer，且不会改变资源状态。
+日志和遥测可以订阅 `KacheClient.events` 或注入 observer。这个通道是受信任的进程内
+领域事件，而不是预先脱敏的日志 DTO：成功的缓存命中、
+读取、请求、写入和 set 事件可以通过 `hasData`、`dataOrNull` 与
+`requireData<T>()` 访问原始对象；应用也可以读取 query key 和不可变 metadata 做路由。
+Kache 不会自动打印或上传事件，`KacheEvent.toString()` 始终省略 data、key、metadata、
+异常 cause 和堆栈。订阅者使用标准 stream operator 自行决定筛选、映射、脱敏、打印
+和上传。`kind`、`phase`、`trigger` 描述操作，`traceId`、`id`、`parentId` 关联 span，
+`clientId` 与 `sequence` 保留单个 client 内的顺序。
+
+## 取消
+
+`resource.cancel()` 取消当前 key 正在执行的共享 fetch；没有 handle 时可以调用
+`client.cancel(key)`，`client.cancelAll()` 返回实际取消的 key 数。因为同 key 调用者
+共享 single-flight，请求取消会影响该 key 的所有等待者，但不会删除缓存、释放 handle
+或禁止后续轮询。
+
+即使 fetcher 返回无法物理中止的 Future，逻辑取消也会立即恢复可见快照，并永久隔离
+迟到的 value/error。Fetcher 可把 `context.cancellation.whenCancelled` 桥接到 HTTP
+客户端的 cancel token 或 abort controller，并在 await 后调用
+`context.throwIfCancelled()` 完成协作式物理取消。set、invalidate、remove、clear、close
+自动取代请求时会分别报告 `dataSet`、`invalidate`、`remove`、`clear`、`close` 原因。
 
 ## 生命周期
 
@@ -220,6 +238,8 @@ Flutter 应用应使用 `KacheScope`，由它选择是否拥有 client，在离�
 `>=7.3.0 <8.0.0`、Riverpod `>=3.3.2 <4.0.0`、Flutter Hooks
 `>=0.21.3+1 <0.22.0`、Hooks Riverpod `>=3.3.2 <4.0.0`、Bloc
 `>=9.2.1 <10.0.0` 和 Provider `>=6.1.5+1 <7.0.0`。
+当前 stable 工作区实际验证 Riverpod/Hooks Riverpod 3.4.2 与 connectivity_plus 7.3.1，
+同时保留可由旧 SDK 解析的兼容下限。
 
 ## 示例
 

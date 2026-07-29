@@ -59,6 +59,7 @@ void main() {
       '## Policy guide',
       '## Custom persistence',
       '## Error handling',
+      '## Cancellation',
       '## Lifecycle',
       '## Compatibility',
     ]) {
@@ -70,6 +71,7 @@ void main() {
       '## 策略选择',
       '## 自定义持久层',
       '## 错误处理',
+      '## 取消',
       '## 生命周期',
       '## 兼容性',
     ]) {
@@ -95,6 +97,16 @@ void main() {
       File('packages/kache_hooks_riverpod/README.md').readAsStringSync(),
       contains('useKacheProvider(ref, profileProvider)'),
     );
+    for (final document in <String>[
+      File('README.md').readAsStringSync(),
+      File('README.zh-CN.md').readAsStringSync(),
+    ]) {
+      expect(document, contains('requireData<T>()'));
+      expect(document, contains('KacheEvent.toString()'));
+      expect(document, contains('client.cancelAll()'));
+      expect(document, contains('3.4.2'));
+      expect(document, contains('7.3.1'));
+    }
   });
 
   test('documented examples analyze as real workspace clients', () async {

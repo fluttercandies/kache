@@ -110,8 +110,9 @@ failures, and missing migrations are reported as `KachePersistenceException`
 with an exact operation and stage. Core recovery deletes the damaged record
 and continues as a cache miss according to policy.
 
-Core lookup events report persistence `cacheHit`, `cacheMiss`, and
-`cacheExpired` outcomes without exposing encoded values or keys.
+Core lookup events report `hit`, `miss`, and `expired` for the persistence
+layer. A successful hit can expose its trusted in-process typed value; Kache's
+sanitized event string never includes it.
 
 ## Encryption
 

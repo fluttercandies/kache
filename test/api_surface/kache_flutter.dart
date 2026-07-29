@@ -29,3 +29,6 @@ KacheClient? verifyScopeLookup(BuildContext context) =>
 Future<KacheSnapshot<int>> verifyControllerRefresh(
   KacheController<int> controller,
 ) => controller.refresh();
+
+bool verifyControllerCancel(KacheController<int> controller) =>
+    controller.cancel();

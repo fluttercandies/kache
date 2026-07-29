@@ -104,8 +104,8 @@ fingerprint，因此需要提供 `migrate(payload, fromSchema)` 读取旧 envelo
 以 `KachePersistenceException` 上报，并带准确 operation/stage。核心恢复流程会删除
 损坏记录，然后按 policy 当作 cache miss 继续。
 
-核心 lookup 事件会报告 persistence `cacheHit`、`cacheMiss` 和 `cacheExpired`，
-不会暴露编码值或 key。
+核心 lookup 事件会报告 persistence layer 的 `hit`、`miss` 和 `expired`。成功命中可在
+受信任的进程内事件中访问类型化值，但 Kache 的脱敏事件字符串永远不会包含它。
 
 ## 加密
 

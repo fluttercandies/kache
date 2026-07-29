@@ -15,3 +15,7 @@ Future<KacheSnapshot<int>> verifyCubitRefresh(KacheCubit<int> cubit) =>
 Future<KacheSnapshot<int>> verifyBindingRefresh(
   KacheBlocBinding<int> binding,
 ) => binding.refresh();
+
+bool verifyCubitCancel(KacheCubit<int> cubit) => cubit.cancel();
+
+bool verifyBindingCancel(KacheBlocBinding<int> binding) => binding.cancel();

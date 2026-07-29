@@ -16,7 +16,10 @@ final class PlaygroundEventEntry {
 
   @override
   String toString() {
-    final parts = <String>[event.kind.name];
+    final parts = <String>[
+      '${event.kind.name}.${event.phase.name}',
+      event.trigger.name,
+    ];
     final debug = event.debugName;
     if (debug != null) {
       parts.add(debug);
@@ -27,6 +30,10 @@ final class PlaygroundEventEntry {
     final failure = event.failure;
     if (failure != null) {
       parts.add(failure.kind.name);
+    }
+    final cancelReason = event.cancelReason;
+    if (cancelReason != null) {
+      parts.add(cancelReason.name);
     }
     return parts.join(' · ');
   }
@@ -114,6 +121,12 @@ final class _ActivityPlaygroundState extends State<ActivityPlayground> {
                 () => widget.client.refreshActive(),
                 'refreshActive',
               ),
+            ),
+            _CommandChip(
+              tooltip: 'client.cancelAll(): cancel every shared fetch',
+              label: 'Cancel requests',
+              icon: Icons.cancel_outlined,
+              onTap: _cancelAll,
             ),
             _CommandChip(
               tooltip: 'client.clearNamespace(...): clear one namespace',
@@ -253,6 +266,12 @@ final class _ActivityPlaygroundState extends State<ActivityPlayground> {
       () => widget.client.prefetch<RepositoryProfile>(widget.peekQuery),
       'prefetch',
     );
+  }
+
+  void _cancelAll() {
+    final count = widget.client.cancelAll();
+    setState(() => _lastClientOp = 'cancelAll → $count cancelled');
+    _snack('cancelAll → $count cancelled');
   }
 
   Future<void> _clientOp(Future<Object?> Function() op, String label) async {

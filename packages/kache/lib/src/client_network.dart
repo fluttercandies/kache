@@ -1,5 +1,17 @@
 part of 'client.dart';
 
+final class _KacheCloseFailure implements Exception {
+  const _KacheCloseFailure({
+    required this.failure,
+    required this.cause,
+    required this.stackTrace,
+  });
+
+  final KacheFailure failure;
+  final Object cause;
+  final StackTrace stackTrace;
+}
+
 extension _KacheClientNetwork on KacheClient {
   void _startNetwork() {
     final source = network;
@@ -19,6 +31,9 @@ extension _KacheClientNetwork on KacheClient {
     }
     final previous = _networkState;
     _networkState = state;
+    _trace(KacheEventTrigger.network)
+        .span(KacheEventKind.network, layer: KacheLayer.network)
+        .succeed(networkState: state);
     if (previous == KacheNetworkState.unavailable &&
         state == KacheNetworkState.available) {
       _requestReconnect();
@@ -27,13 +42,13 @@ extension _KacheClientNetwork on KacheClient {
 
   void _handleNetworkError(Object error, StackTrace stackTrace) {
     if (!_isClosed) {
-      _reportConnectivityFailure(error, stackTrace);
+      _emitNetworkFailure(error, stackTrace);
     }
   }
 
   void _handleNetworkDone() {
     if (!_isClosed) {
-      _reportConnectivityFailure(
+      _emitNetworkFailure(
         StateError('The network state stream ended unexpectedly.'),
         StackTrace.current,
       );
@@ -49,7 +64,7 @@ extension _KacheClientNetwork on KacheClient {
       return;
     }
     late final Future<void> tracked;
-    tracked = _performReconnect().whenComplete(() {
+    tracked = _runReconnect().whenComplete(() {
       if (identical(_reconnectFuture, tracked)) {
         _reconnectFuture = null;
       }
@@ -63,33 +78,46 @@ extension _KacheClientNetwork on KacheClient {
     unawaited(tracked);
   }
 
-  Future<void> _performReconnect() async {
-    _emitEvent(kind: KacheEventKind.reconnectStarted);
+  Future<void> _runReconnect() async {
+    final trace = _trace(KacheEventTrigger.reconnect);
+    final span = trace.span(KacheEventKind.reconnect)..start();
     try {
-      await revalidateOnReconnect();
+      final resources = _resources.toList(growable: false);
+      await Future.wait<void>(
+        resources.map((resource) => resource._revalidateOnReconnect(trace)),
+      );
+      span.succeed();
     } on Object catch (error, stackTrace) {
-      _reportConnectivityFailure(error, stackTrace);
-    } finally {
-      _emitEvent(kind: KacheEventKind.reconnectCompleted);
-    }
-  }
-
-  void _reportConnectivityFailure(Object error, StackTrace stackTrace) {
-    _reportFailure(
-      KacheFailure(
+      final failure = KacheFailure(
         kind: KacheFailureKind.connectivity,
         cause: error,
         stackTrace: stackTrace,
-      ),
-    );
+      );
+      span.fail(failure);
+    }
   }
 
-  Future<void> _closeOwnedDependencies() async {
-    Object? firstError;
-    StackTrace? firstStackTrace;
+  void _emitNetworkFailure(Object error, StackTrace stackTrace) {
+    final failure = KacheFailure(
+      kind: KacheFailureKind.connectivity,
+      cause: error,
+      stackTrace: stackTrace,
+    );
+    _trace(KacheEventTrigger.network)
+        .span(KacheEventKind.network, layer: KacheLayer.network)
+        .fail(failure);
+  }
+
+  Future<void> _closeOwnedDependencies(_KacheTrace trace) async {
+    _KacheCloseFailure? firstFailure;
     if (persistenceOwnership == KachePersistenceOwnership.owned) {
+      final span = trace.span(
+        KacheEventKind.close,
+        layer: KacheLayer.persistence,
+      )..start();
       try {
         await persistence!.close();
+        span.succeed();
       } on Object catch (error, stackTrace) {
         final details = _normalizePersistenceError(
           error: error,
@@ -97,26 +125,50 @@ extension _KacheClientNetwork on KacheClient {
           expectedOperation: KachePersistenceOperation.close,
           fallbackStage: KachePersistenceStage.backend,
         );
-        firstError = KachePersistenceException(
+        final cause = KachePersistenceException(
           operation: KachePersistenceOperation.close,
           stage: details.stage,
           cause: details.cause,
           stackTrace: details.stackTrace,
         );
-        firstStackTrace = details.stackTrace;
+        final failure = KacheFailure(
+          kind: KacheFailureKind.persistenceClose,
+          cause: details.cause,
+          stackTrace: details.stackTrace,
+          persistenceStage: details.stage,
+        );
+        span.fail(failure);
+        firstFailure = _KacheCloseFailure(
+          failure: failure,
+          cause: cause,
+          stackTrace: details.stackTrace,
+        );
       }
     }
     if (networkOwnership == KacheNetworkOwnership.owned) {
+      final span = trace.span(
+        KacheEventKind.close,
+        layer: KacheLayer.network,
+      )..start();
       try {
         await network!.close();
+        span.succeed();
       } on Object catch (error, stackTrace) {
-        _reportConnectivityFailure(error, stackTrace);
-        firstError ??= error;
-        firstStackTrace ??= stackTrace;
+        final failure = KacheFailure(
+          kind: KacheFailureKind.connectivity,
+          cause: error,
+          stackTrace: stackTrace,
+        );
+        span.fail(failure);
+        firstFailure ??= _KacheCloseFailure(
+          failure: failure,
+          cause: error,
+          stackTrace: stackTrace,
+        );
       }
     }
-    if (firstError case final error?) {
-      Error.throwWithStackTrace(error, firstStackTrace!);
+    if (firstFailure case final failure?) {
+      Error.throwWithStackTrace(failure, failure.stackTrace);
     }
   }
 }

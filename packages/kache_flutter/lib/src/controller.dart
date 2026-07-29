@@ -86,6 +86,12 @@ final class KacheController<T> extends ChangeNotifier
     return _run(_resource.remove());
   }
 
+  /// Cancels the shared in-flight fetch for the current key.
+  bool cancel() {
+    _ensureActive();
+    return _resource.cancel();
+  }
+
   @override
   void dispose() {
     if (_isDisposed) {

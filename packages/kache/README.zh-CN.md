@@ -100,8 +100,8 @@ binding。
 ## 命令
 
 `KacheResource` 提供 `load`、`refresh`、`setData`、`updateData`、
-`invalidate` 和 `remove`。`KacheClient` 额外提供 `prefetch`、`peek`、namespace
-清理、全量清理、活跃资源刷新和 resume 重验。
+`invalidate`、`remove` 和 `cancel`。`KacheClient` 额外提供 `prefetch`、`peek`、
+`cancel(key)`、`cancelAll`、namespace 清理、全量清理、活跃资源刷新和 resume 重验。
 
 配置可选 `KacheNetwork` 后，来源从 `unavailable` 变为 `available` 时自动重验。
 每个 handle 保留自己的 `refreshOnReconnect` 策略，同 key fetch 仍保持 single-flight。
@@ -125,9 +125,25 @@ binding。
 预期失败通过快照和命令结果中的 `KacheFailure` 表达。原始异常和堆栈会保留，字符串
 输出会脱敏；配置和生命周期误用会立即抛出。
 
-可订阅 `KacheClient.events` 做遥测。observer 自身失败不会中断缓存状态机。lookup
-事件通过 `cacheHit`、`cacheMiss` 或 `cacheExpired` 标明 `memory` 或
-`persistence` layer，且不携带 payload。
+可订阅 `KacheClient.events` 做遥测，observer 自身失败不会中断缓存状态机。事件通过
+`kind + phase + trigger`、成对 span/trace id、scope、耗时、revision 和 query context
+描述完整操作。成功的缓存命中、读取、请求、写入和 set 事件可以通过
+`requireData<T>()` 访问原始类型对象；`hasData` 能区分缺失与 nullable `null`。
+
+这是受信任的进程内通道。Kache 不会自动记录或上传，脱敏的 `toString()` 不包含 data、
+key、metadata、异常 cause 与堆栈。筛选、映射、脱敏、打印和上传由订阅者控制。
+
+## 取消
+
+同 key fetch 会共享，因此 `resource.cancel()` 与 `client.cancel(key)` 会逻辑取消该 key
+的所有等待者，`client.cancelAll()` 按 key 计数。命令会恢复请求前快照，不删除数据，
+也不停止后续轮询。无法协作取消的 Future 可能继续在后台执行，但迟到 value/error
+不能更新状态，也不会制造 fetch failure。
+
+Fetcher 可以把 `context.cancellation.whenCancelled` 桥接到 HTTP cancel token 或 abort
+controller，并用 `context.throwIfCancelled()` 获取精确原因。set、invalidate、remove、
+clear 与 close 也会用各自原因取消冲突任务。释放单个 handle 不会取消其他 handle
+共享的请求。
 
 ## 所有权
 

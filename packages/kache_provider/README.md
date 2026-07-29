@@ -89,6 +89,9 @@ consumer semantics.
 Use `snapshot.when` for exhaustive idle/loading/data/error rendering. The
 controller's `refresh` returns `Future<KacheSnapshot<T>>`; Provider only adapts
 the core resource lifecycle and does not duplicate its state machine.
+The controller also exposes key-scoped `cancel()`. Same-key Provider bindings
+share the core fetch, so cancellation affects all waiters without disposing
+their controllers.
 
 Use `context.readKache<T>()` for commands without subscribing and
 `context.watchKache<T>()` to rebuild from the nearest snapshot.

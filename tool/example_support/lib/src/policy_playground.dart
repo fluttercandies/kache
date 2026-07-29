@@ -24,7 +24,7 @@ final class PolicyCardModel {
   /// Latest snapshot for this policy's query.
   final KacheSnapshot<RepositoryProfile> snapshot;
 
-  /// Number of `fetchStarted` events observed for this query's key.
+  /// Number of started fetch events observed for this query's key.
   final int fetchCount;
 
   /// Triggers an explicit refresh on this query.

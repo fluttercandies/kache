@@ -85,6 +85,8 @@ Provider consumer 的静态 `child` 语义。
 
 使用 `snapshot.when` 完整处理 idle/loading/data/error。controller 的 `refresh` 返回
 `Future<KacheSnapshot<T>>`；Provider 只负责核心 resource 生命周期适配，不复制状态机。
+controller 也提供按 key 生效的 `cancel()`；同 key Provider binding 共享核心 fetch，
+因此取消影响所有等待者，但不会释放 controller。
 
 不订阅地执行命令使用 `context.readKache<T>()`；根据最近快照重建使用
 `context.watchKache<T>()`。

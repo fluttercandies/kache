@@ -67,6 +67,12 @@ class KacheCubit<T> extends Cubit<KacheSnapshot<T>> {
     return _run(binding.remove());
   }
 
+  /// Cancels the shared in-flight fetch for the current key.
+  bool cancel() {
+    _ensureActive();
+    return binding.cancel();
+  }
+
   @override
   Future<void> close() {
     final existing = _closeFuture;

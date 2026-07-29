@@ -1,3 +1,11 @@
+## 2.0.0
+
+- Added `KacheNotifier.cancel()` for the provider resource's shared key fetch.
+- Adopted the core 2.0 event and cancellation contracts.
+- Verified native provider lifecycle, keep-alive, dependency rebuild,
+  override, family, and no-loop behavior with Riverpod 3.4.2 while retaining
+  the Riverpod 3.3.2 compatible floor.
+
 ## 1.2.0
 
 - Added `KacheProvider` and `KacheProviderFamily` aliases while preserving

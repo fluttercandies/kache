@@ -27,3 +27,5 @@ KacheProviderFamily<int, String> verifyProviderFamily(
 
 Future<KacheSnapshot<int>> verifyNotifierRefresh(KacheNotifier<int> notifier) =>
     notifier.refresh();
+
+bool verifyNotifierCancel(KacheNotifier<int> notifier) => notifier.cancel();

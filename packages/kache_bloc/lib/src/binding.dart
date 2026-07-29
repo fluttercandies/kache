@@ -72,6 +72,12 @@ final class KacheBlocBinding<T> {
   /// Removes current memory and persisted data without fetching.
   Future<KacheSnapshot<T>> remove() => _run(_resource.remove);
 
+  /// Cancels the shared in-flight fetch for the current key.
+  bool cancel() {
+    _ensureActive();
+    return _resource.cancel();
+  }
+
   /// Cancels the managed listener and releases the resource handle.
   Future<void> close() {
     final existing = _closeFuture;

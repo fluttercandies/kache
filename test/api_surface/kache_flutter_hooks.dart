@@ -7,3 +7,5 @@ KacheController<int> verifyUseKache(
 
 KacheSnapshot<int> verifyHookSnapshot(KacheController<int> controller) =>
     controller.snapshot;
+
+bool verifyHookCancel(KacheController<int> controller) => controller.cancel();

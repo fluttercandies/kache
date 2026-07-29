@@ -80,7 +80,7 @@ their native behavior.
 
 The returned `KacheProviderBinding<T>` contains the snapshot and notifier
 watched in the current build, plus `load`, `refresh`, `setData`,
-`updateData`, `invalidate`, `remove`, `keepAlive`, and `releaseKeepAlive`
+`updateData`, `invalidate`, `remove`, `cancel`, `keepAlive`, and `releaseKeepAlive`
 delegates.
 
 The quick start marks `clientProvider` as scoped because the application

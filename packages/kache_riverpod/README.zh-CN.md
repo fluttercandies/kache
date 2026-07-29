@@ -97,7 +97,7 @@ source、persistence，以及“缓存正在刷新”和“缓存伴随错误”
 ## 命令与生命周期
 
 通过 notifier 可以调用 `load`、`refresh`、`setData`、`updateData`、
-`invalidate` 和 `remove`。如果 notifier 或它的属性会影响 widget `build` 输出，
+`invalidate`、`remove` 和按 key 生效的 `cancel`。如果 notifier 或它的属性会影响 widget `build` 输出，
 应 watch `provider.notifier`；如果只在事件中执行命令，应在事件回调内部 read
 notifier。这遵循 Riverpod 不在 build 中捕获 `ref.read` 值的建议。`keepAlive()` 与
 `releaseKeepAlive()` 只管理 Riverpod keep-alive link，不改变核心 cache GC 语义。
@@ -111,6 +111,8 @@ notifier emit。
 
 provider 持有活动 resource 时，`refreshInterval` 会按周期刷新。纯 Dart 宿主由 client
 owner 调用 `pausePolling()` 和 `resumePolling()` 管理后台计时器。
+取消共享 fetch 不会 invalidate Riverpod provider，也不会释放 resource；无法协作停止
+的迟到结果不能回写 state。
 
 ## Riverpod 互操作
 

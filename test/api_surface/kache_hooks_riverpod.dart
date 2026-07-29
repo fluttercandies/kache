@@ -9,3 +9,5 @@ KacheProviderBinding<int> verifyUseKacheProvider(
 Future<KacheSnapshot<int>> verifyBindingRefresh(
   KacheProviderBinding<int> binding,
 ) => binding.refresh();
+
+bool verifyBindingCancel(KacheProviderBinding<int> binding) => binding.cancel();

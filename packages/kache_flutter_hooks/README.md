@@ -89,8 +89,8 @@ cached data. The hook never owns or closes the client.
 
 - `useKache<T>(query, client:)` returns `KacheController<T>`.
 - `cache.snapshot` is a readable alias for `cache.value`.
-- `load`, `refresh`, `setData`, `updateData`, `invalidate`, and `remove` are the
-  existing controller commands.
+- `load`, `refresh`, `setData`, `updateData`, `invalidate`, `remove`, and
+  key-scoped `cancel` are the existing controller commands.
 
 The package re-exports `kache_flutter`, but does not re-export
 `flutter_hooks`. Application source using `HookWidget` must declare and import

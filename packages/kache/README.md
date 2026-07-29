@@ -106,8 +106,9 @@ active. Same-key handles still share one fetch. Client owners can call
 ## Commands
 
 `KacheResource` exposes `load`, `refresh`, `setData`, `updateData`,
-`invalidate`, and `remove`. `KacheClient` adds `prefetch`, `peek`, namespace
-clear, global clear, active-resource refresh, and resume revalidation.
+`invalidate`, `remove`, and `cancel`. `KacheClient` adds `prefetch`, `peek`,
+`cancel(key)`, `cancelAll`, namespace clear, global clear, active-resource
+refresh, and resume revalidation.
 
 Configure an optional `KacheNetwork` to revalidate after an
 `unavailable -> available` transition. Each handle keeps its own
@@ -135,8 +136,28 @@ results. The original cause and stack trace are retained, while string output
 is sanitized. Configuration and lifecycle misuse throw immediately.
 
 Observe `KacheClient.events` for telemetry. Observer failures cannot interrupt
-the cache state machine. Lookup events report `cacheHit`, `cacheMiss`, or
-`cacheExpired` with a `memory` or `persistence` layer and no payload.
+the cache state machine. Events use `kind + phase + trigger`, paired span and
+trace ids, scope, timing, revision, and query context. Successful cache hits,
+reads, fetches, writes, and sets may expose the original typed object through
+`requireData<T>()`, including a nullable `null` distinguished by `hasData`.
+
+This is a trusted in-process channel. Kache never logs or uploads it, and the
+sanitized `toString()` omits data, key, metadata, causes, and stack traces.
+Subscribers own filtering, mapping, redaction, printing, and export.
+
+## Cancellation
+
+Same-key fetches are shared, so `resource.cancel()` and `client.cancel(key)`
+logically cancel every waiter for that key; `client.cancelAll()` counts keys.
+The command restores the pre-fetch snapshot without deleting data or stopping
+future polling. A non-cooperative Future may continue in the background, but
+its late value or error cannot update state or emit a fetch failure.
+
+Fetchers can bridge `context.cancellation.whenCancelled` to an HTTP cancel
+token or abort controller. `context.throwIfCancelled()` exposes the precise
+reason. Setting data, invalidating, removing, clearing, and closing also cancel
+conflicting work with their own reasons. Disposing one handle does not cancel a
+request shared by other handles.
 
 ## Ownership
 

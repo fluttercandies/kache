@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'cancellation.dart';
 import 'clock.dart';
 import 'command.dart';
-import 'event.dart';
 import 'failure.dart';
 import 'key.dart';
 import 'network.dart';
@@ -19,7 +19,23 @@ part 'entry.dart';
 part 'entry_commands.dart';
 part 'entry_persistence.dart';
 part 'entry_snapshot.dart';
+part 'event.dart';
 part 'resource.dart';
+
+int _nextGeneratedClientId = 0;
+
+String _resolveClientId(String? value) {
+  if (value == null) {
+    return 'kache-${++_nextGeneratedClientId}';
+  }
+  if (value.trim().isEmpty) {
+    throw const KacheConfigurationException(
+      'invalid_client_id',
+      'A client id must contain at least one non-whitespace character.',
+    );
+  }
+  return value;
+}
 
 typedef _KachePersistenceError = ({
   Object cause,
@@ -57,6 +73,7 @@ final class KacheClient {
   /// Injected persistence is borrowed by default. Select
   /// [KachePersistenceOwnership.owned] when this client must close it.
   KacheClient({
+    String? id,
     this.persistence,
     this.persistenceOwnership = KachePersistenceOwnership.borrowed,
     this.network,
@@ -64,7 +81,8 @@ final class KacheClient {
     KacheClock clock = systemKacheClock,
     KacheScheduler scheduler = systemKacheScheduler,
     KacheObserver? observer,
-  })  : _clock = clock,
+  })  : id = _resolveClientId(id),
+        _clock = clock,
         _scheduler = scheduler,
         _observer = observer {
     if (persistence == null &&
@@ -82,6 +100,9 @@ final class KacheClient {
     }
     _startNetwork();
   }
+
+  /// Stable identity included in every event emitted by this client.
+  final String id;
 
   /// The optional persistence backend used by persisted queries.
   final KachePersistenceBackend? persistence;
@@ -113,6 +134,10 @@ final class KacheClient {
   StreamSubscription<KacheNetworkState>? _networkSubscription;
   Future<void>? _reconnectFuture;
   Future<void>? _closeFuture;
+  int _eventId = 0;
+  int _eventSequence = 0;
+  final Queue<KacheEvent> _eventQueue = ListQueue<KacheEvent>();
+  bool _isDispatchingEvents = false;
 
   /// Whether [close] has started.
   bool get isClosed => _isClosed;
@@ -120,7 +145,7 @@ final class KacheClient {
   /// Latest state emitted by [network], or `null` before its first state.
   KacheNetworkState? get networkState => _networkState;
 
-  /// Broadcast cache lifecycle events without replaying payload data.
+  /// Broadcast trusted in-process lifecycle events without replay.
   Stream<KacheEvent> get events => _events.stream;
 
   /// Creates an independent resource handle for [query].
@@ -163,10 +188,7 @@ final class KacheClient {
   /// Revalidates active handles according to each reconnect policy.
   Future<void> revalidateOnReconnect() {
     _ensureOpen();
-    final resources = _resources.toList(growable: false);
-    return Future.wait<void>(
-      resources.map((resource) => resource.revalidateOnReconnect()),
-    );
+    return _runReconnect();
   }
 
   /// Forces refresh on every active handle.
@@ -225,10 +247,32 @@ final class KacheClient {
   Future<KacheSnapshot<T>> prefetch<T>(KacheQuery<T> query) async {
     final resource = watch(query);
     try {
-      return await resource.load();
+      return await resource._loadWith(KacheEventTrigger.prefetch);
     } finally {
       resource.dispose();
     }
+  }
+
+  /// Cancels the shared in-flight fetch for [key].
+  ///
+  /// Cached data and future polling remain unchanged. Returns `false` when the
+  /// key has no active cancellable fetch.
+  bool cancel(KacheKey key) {
+    _ensureOpen();
+    return _entries[key.storageKey]?.cancelFetch(KacheCancelReason.manual) ??
+        false;
+  }
+
+  /// Cancels every currently cancellable fetch and returns the affected count.
+  int cancelAll() {
+    _ensureOpen();
+    var count = 0;
+    for (final entry in _entries.values.toList(growable: false)) {
+      if (entry.cancelFetch(KacheCancelReason.manual)) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   /// Returns the active in-memory snapshot for [key] without I/O or loading.
@@ -256,7 +300,9 @@ final class KacheClient {
       return existing;
     }
     _isClosed = true;
-    final future = _performClose(drainWrites: drainWrites);
+    final trace = _trace(KacheEventTrigger.close);
+    final span = trace.span(KacheEventKind.close)..start();
+    final future = _performClose(drainWrites: drainWrites, span: span);
     _closeFuture = future;
     return future;
   }
@@ -267,7 +313,11 @@ final class KacheClient {
     bool refetch = false,
   }) {
     _ensureOpen();
-    _emitEvent(kind: KacheEventKind.clearStarted, namespace: namespace);
+    final trace = _trace(
+      KacheEventTrigger.clear,
+      namespace: namespace,
+    );
+    final span = trace.span(KacheEventKind.clear);
     _namespaceEpochs.update(
       namespace.value,
       (value) => value + 1,
@@ -279,77 +329,142 @@ final class KacheClient {
     for (final entry in entries) {
       entry.prepareForClear();
     }
+    span.start();
     return _scheduleClear(
       () => _performClear(
         entries: entries,
         namespace: namespace,
         refetch: refetch,
+        trace: trace,
+        span: span,
       ),
+      span,
     );
   }
 
   /// Clears every active memory and persisted cache entry.
   Future<KacheClearResult> clear({bool refetch = false}) {
     _ensureOpen();
-    _emitEvent(kind: KacheEventKind.clearStarted);
+    final trace = _trace(KacheEventTrigger.clear);
+    final span = trace.span(KacheEventKind.clear);
     _globalEpoch += 1;
     final entries = _entries.values.toList(growable: false);
     for (final entry in entries) {
       entry.prepareForClear();
     }
+    span.start();
     return _scheduleClear(
-      () => _performClear(entries: entries, refetch: refetch),
+      () => _performClear(
+        entries: entries,
+        refetch: refetch,
+        trace: trace,
+        span: span,
+      ),
+      span,
     );
   }
 
   DateTime _now() => _clock().toUtc();
 
-  _KacheOperationVersion _captureVersion(KacheKey key, int generation) =>
+  _KacheOperationVersion _captureVersion(
+    KacheKey key,
+    int generation,
+    KacheCancellationToken cancellation,
+  ) =>
       _KacheOperationVersion(
         generation: generation,
         globalEpoch: _globalEpoch,
         namespaceEpoch: _namespaceEpochs[key.namespace] ?? 0,
+        cancellation: cancellation,
       );
 
   bool _isEpochCurrent(KacheKey key, _KacheOperationVersion version) =>
       version.globalEpoch == _globalEpoch &&
       version.namespaceEpoch == (_namespaceEpochs[key.namespace] ?? 0);
 
-  void _emitEvent({
-    required KacheEventKind kind,
+  String _nextEventId() => '$id:${++_eventId}';
+
+  _KacheTrace _trace(
+    KacheEventTrigger trigger, {
+    KacheQuery<dynamic>? query,
     KacheKey? key,
     KacheNamespace? namespace,
-    String? debugName,
-    KacheFailure? failure,
-    KacheCacheLayer? layer,
+  }) =>
+      _KacheTrace(
+        client: this,
+        id: _nextEventId(),
+        trigger: trigger,
+        context: query == null
+            ? _KacheEventContext(key: key, namespace: namespace)
+            : _KacheEventContext(
+                key: query.key,
+                debugName: query.debugName,
+                metadata: query.metadata,
+              ),
+      );
+
+  void _dispatchEvent({
+    required String traceId,
+    required String id,
+    required String? parentId,
+    required KacheEventKind kind,
+    required KacheEventPhase phase,
+    required KacheEventTrigger trigger,
+    required Duration? duration,
+    required _KacheEventContext context,
+    required KacheLayer? layer,
+    required KacheLookupResult? lookup,
+    required KacheNetworkState? networkState,
+    required KacheFailure? failure,
+    required KacheCancelReason? cancelReason,
+    required int? revision,
+    required Object? data,
   }) {
     if (_events.isClosed) {
       return;
     }
-    final event = KacheEvent(
+    final event = KacheEvent._(
+      clientId: this.id,
+      sequence: ++_eventSequence,
+      traceId: traceId,
+      id: id,
+      parentId: parentId,
       kind: kind,
+      phase: phase,
+      trigger: trigger,
       occurredAt: _now(),
-      key: key,
-      namespace: namespace,
-      debugName: debugName,
-      failure: failure,
+      duration: duration,
+      key: context.key,
+      namespace: context.namespace,
+      debugName: context.debugName,
+      metadata: context.metadata,
       layer: layer,
+      lookup: lookup,
+      networkState: networkState,
+      failure: failure,
+      cancelReason: cancelReason,
+      revision: revision,
+      data: data,
     );
-    try {
-      _observer?.call(event);
-    } on Object {
-      // Observer failures are isolated from the cache state machine.
+    _eventQueue.addLast(event);
+    if (_isDispatchingEvents) {
+      return;
     }
-    _events.add(event);
+    _isDispatchingEvents = true;
+    try {
+      while (_eventQueue.isNotEmpty && !_events.isClosed) {
+        final next = _eventQueue.removeFirst();
+        try {
+          _observer?.call(next);
+        } on Object {
+          // Observer failures are isolated from the cache state machine.
+        }
+        _events.add(next);
+      }
+    } finally {
+      _isDispatchingEvents = false;
+    }
   }
-
-  void _reportFailure(KacheFailure failure, {String? debugName}) => _emitEvent(
-        kind: KacheEventKind.failure,
-        key: failure.key,
-        namespace: failure.namespace,
-        debugName: debugName,
-        failure: failure,
-      );
 
   void _ensureOpen() {
     if (_isClosed) {
@@ -435,6 +550,8 @@ final class KacheClient {
     required List<_KacheEntryBase> entries,
     KacheNamespace? namespace,
     required bool refetch,
+    required _KacheTrace trace,
+    required _KacheEventSpan span,
   }) async {
     await Future.wait<void>(entries.map((entry) => entry.drainWrites()));
 
@@ -454,7 +571,6 @@ final class KacheClient {
           namespace: namespace,
         );
         failures.add(failure);
-        _reportFailure(failure);
         for (final entry in entries) {
           entry.reportClearFailure(failure);
         }
@@ -472,15 +588,20 @@ final class KacheClient {
           .where((resource) => affectedKeys.contains(resource.key))
           .toList(growable: false);
       await Future.wait<void>(
-        resources.map((resource) => resource.revalidateAfterClear()),
+        resources.map((resource) => resource._revalidateAfterClear(trace)),
       );
     }
-    _emitEvent(kind: KacheEventKind.clearCompleted, namespace: namespace);
+    if (failures.isNotEmpty) {
+      span.fail(failures.first);
+    } else {
+      span.succeed();
+    }
     return KacheClearResult(failures: failures);
   }
 
   Future<KacheClearResult> _scheduleClear(
     Future<KacheClearResult> Function() operation,
+    _KacheEventSpan span,
   ) {
     final previous = _clearTail;
     final tailCompleter = Completer<void>();
@@ -493,6 +614,16 @@ final class KacheClient {
       try {
         result.complete(await operation());
       } on Object catch (error, stackTrace) {
+        if (!span._ended) {
+          span.fail(
+            KacheFailure(
+              kind: KacheFailureKind.clear,
+              namespace: span.trace.context.namespace,
+              cause: error,
+              stackTrace: stackTrace,
+            ),
+          );
+        }
         result.completeError(error, stackTrace);
       } finally {
         tailCompleter.complete();
@@ -523,37 +654,51 @@ final class KacheClient {
     );
   }
 
-  Future<void> _performClose({required bool drainWrites}) async {
-    final networkSubscription = _networkSubscription;
-    _networkSubscription = null;
-    await networkSubscription?.cancel();
-    final resources = _resources.toList(growable: false);
-    for (final resource in resources) {
-      resource.dispose();
-    }
-    final entries = _entries.values.toList(growable: false);
-    _entries.clear();
-    if (!drainWrites) {
-      _globalEpoch += 1;
-    }
-    for (final entry in entries) {
-      entry.prepareForClientClose(cancelPendingWrites: !drainWrites);
-    }
-    final clearTail = _clearTail;
-    if (clearTail != null) {
-      await clearTail;
-    }
-    await Future.wait<void>(entries.map((entry) => entry.drainForClose()));
-    if (drainWrites) {
-      _globalEpoch += 1;
-    }
-    for (final entry in entries) {
-      await entry.finishClose();
-    }
+  Future<void> _performClose({
+    required bool drainWrites,
+    required _KacheEventSpan span,
+  }) async {
     try {
-      await _closeOwnedDependencies();
+      final networkSubscription = _networkSubscription;
+      _networkSubscription = null;
+      await networkSubscription?.cancel();
+      final resources = _resources.toList(growable: false);
+      for (final resource in resources) {
+        resource.dispose();
+      }
+      final entries = _entries.values.toList(growable: false);
+      _entries.clear();
+      if (!drainWrites) {
+        _globalEpoch += 1;
+      }
+      for (final entry in entries) {
+        entry.prepareForClientClose(cancelPendingWrites: !drainWrites);
+      }
+      final clearTail = _clearTail;
+      if (clearTail != null) {
+        await clearTail;
+      }
+      await Future.wait<void>(entries.map((entry) => entry.drainForClose()));
+      if (drainWrites) {
+        _globalEpoch += 1;
+      }
+      for (final entry in entries) {
+        await entry.finishClose();
+      }
+      await _closeOwnedDependencies(span.trace);
+      span.succeed();
+    } on _KacheCloseFailure catch (error) {
+      span.fail(error.failure);
+      Error.throwWithStackTrace(error.cause, error.stackTrace);
+    } on Object catch (error, stackTrace) {
+      final failure = KacheFailure(
+        kind: KacheFailureKind.lifecycle,
+        cause: error,
+        stackTrace: stackTrace,
+      );
+      span.fail(failure);
+      Error.throwWithStackTrace(error, stackTrace);
     } finally {
-      _emitEvent(kind: KacheEventKind.clientClosed);
       await _events.close();
     }
   }

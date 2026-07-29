@@ -27,7 +27,9 @@ void main() {
     expect(client.networkState, KacheNetworkState.unavailable);
 
     final completed = client.events.firstWhere(
-      (event) => event.kind == KacheEventKind.reconnectCompleted,
+      (event) =>
+          event.kind == KacheEventKind.reconnect &&
+          event.phase == KacheEventPhase.succeeded,
     );
     connectivity.emit(<ConnectivityResult>[ConnectivityResult.wifi]);
     await completed;

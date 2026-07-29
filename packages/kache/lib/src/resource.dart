@@ -3,13 +3,15 @@ part of 'client.dart';
 abstract interface class _KacheResourceBase {
   KacheKey get key;
 
-  Future<void> revalidateAfterClear();
+  Future<void> _revalidateAfterClear(_KacheTrace trace);
 
   Future<void> revalidateOnResume();
 
-  Future<void> revalidateOnReconnect();
+  Future<void> _revalidateOnReconnect(_KacheTrace trace);
 
   Future<void> refreshActive();
+
+  bool cancel();
 
   void pausePolling();
 
@@ -83,14 +85,36 @@ final class KacheResource<T> implements _KacheResourceBase {
   Future<KacheSnapshot<T>> load() {
     _ensureActive();
     _didStartAutomaticLoad = true;
-    return _trackPolling(_entry.load(query));
+    return _loadWith(KacheEventTrigger.load);
   }
 
   /// Forces a fetch with this handle's fetcher, ignoring freshness.
   Future<KacheSnapshot<T>> refresh() {
     _ensureActive();
-    return _trackPolling(_entry.refresh(query));
+    return _refreshWith(KacheEventTrigger.refresh);
   }
+
+  Future<KacheSnapshot<T>> _loadWith(
+    KacheEventTrigger trigger, {
+    _KacheTrace? trace,
+  }) =>
+      _trackPolling(
+        _entry.load(
+          query,
+          trace: trace ?? _client._trace(trigger, query: query),
+        ),
+      );
+
+  Future<KacheSnapshot<T>> _refreshWith(
+    KacheEventTrigger trigger, {
+    _KacheTrace? trace,
+  }) =>
+      _trackPolling(
+        _entry.refresh(
+          query,
+          trace: trace ?? _client._trace(trigger, query: query),
+        ),
+      );
 
   /// Replaces this handle's same-key fetcher and policy without loading.
   void updateQuery(KacheQuery<T> query) {
@@ -103,7 +127,11 @@ final class KacheResource<T> implements _KacheResourceBase {
   /// Replaces current data immediately and persists it when configured.
   Future<KacheSnapshot<T>> setData(T data) {
     _ensureActive();
-    return _entry.setData(data, query: query);
+    return _entry.setData(
+      data,
+      query: query,
+      trace: _client._trace(KacheEventTrigger.set, query: query),
+    );
   }
 
   /// Atomically computes and stores data from the latest shared snapshot.
@@ -111,19 +139,38 @@ final class KacheResource<T> implements _KacheResourceBase {
     T Function(KacheSnapshot<T> snapshot) update,
   ) {
     _ensureActive();
-    return _entry.updateData(update, query: query);
+    return _entry.updateData(
+      update,
+      query: query,
+      trace: _client._trace(KacheEventTrigger.update, query: query),
+    );
   }
 
   /// Marks current data stale and optionally starts a fresh fetch.
   Future<KacheSnapshot<T>> invalidate({bool refetch = true}) {
     _ensureActive();
-    return _entry.invalidate(query, refetch: refetch);
+    return _entry.invalidate(
+      query,
+      refetch: refetch,
+      trace: _client._trace(KacheEventTrigger.invalidate, query: query),
+    );
   }
 
   /// Removes current memory and persisted data without fetching.
   Future<KacheSnapshot<T>> remove() {
     _ensureActive();
-    return _entry.remove();
+    return _entry.remove(
+      trace: _client._trace(KacheEventTrigger.remove, query: query),
+    );
+  }
+
+  /// Cancels the shared in-flight fetch for this key.
+  ///
+  /// Returns `false` when no cancellable fetch is active.
+  @override
+  bool cancel() {
+    _ensureActive();
+    return _entry.cancelFetch(KacheCancelReason.manual);
   }
 
   /// Idempotently releases this handle and closes its stream.
@@ -140,30 +187,38 @@ final class KacheResource<T> implements _KacheResourceBase {
   }
 
   @override
-  Future<void> revalidateAfterClear() async {
+  Future<void> _revalidateAfterClear(_KacheTrace trace) async {
     if (!_isDisposed && !_entry.hasPendingClears) {
-      await refresh();
+      await _refreshWith(KacheEventTrigger.clearRefetch, trace: trace);
     }
   }
 
   @override
   Future<void> revalidateOnResume() async {
     if (!_isDisposed) {
-      await _entry.revalidate(query, query.policy.refreshOnResume);
+      await _entry.revalidate(
+        query,
+        query.policy.refreshOnResume,
+        trace: _client._trace(KacheEventTrigger.resume, query: query),
+      );
     }
   }
 
   @override
-  Future<void> revalidateOnReconnect() async {
+  Future<void> _revalidateOnReconnect(_KacheTrace trace) async {
     if (!_isDisposed) {
-      await _entry.revalidate(query, query.policy.refreshOnReconnect);
+      await _entry.revalidate(
+        query,
+        query.policy.refreshOnReconnect,
+        trace: trace,
+      );
     }
   }
 
   @override
   Future<void> refreshActive() async {
     if (!_isDisposed) {
-      await refresh();
+      await _refreshWith(KacheEventTrigger.refresh);
     }
   }
 
@@ -263,7 +318,7 @@ final class KacheResource<T> implements _KacheResourceBase {
 
   Future<void> _runPoll() async {
     try {
-      await refresh();
+      await _refreshWith(KacheEventTrigger.poll);
     } on KacheLifecycleException {
       if (!_isDisposed && !_client.isClosed) {
         _pollAnchor = _client._now();
