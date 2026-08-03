@@ -1,6 +1,10 @@
 part of 'store.dart';
 
 /// A binding that stores values through a registered Hive CE [TypeAdapter].
+///
+/// This binding follows the adapter's own binary compatibility contract and
+/// does not add a Kache schema or migration hook. Use [HiveCeKacheStore.bind]
+/// when the payload needs explicit schema versions and migrations.
 final class HiveCeAdapterBinding<T> extends KachePersistenceBinding<T> {
   HiveCeAdapterBinding._({
     required super.backend,
@@ -13,7 +17,8 @@ final class HiveCeAdapterBinding<T> extends KachePersistenceBinding<T> {
 
 extension _HiveCeAdapterStore on HiveCeKacheStore {
   Future<KachePersistenceRead<T>> _readAdapter<T>({
-    required KacheKey key,
+    required String physicalKey,
+    required String? legacyKey,
     required HiveCeAdapterBinding<T> binding,
     required Object raw,
   }) async {
@@ -40,19 +45,29 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
         stackTrace: StackTrace.current,
       );
     }
+    final entry = KachePersistedEntry<T>(
+      data: data,
+      metadata: KachePersistedMetadata(
+        fetchedAt: envelope.fetchedAt,
+        isInvalidated: envelope.isInvalidated,
+      ),
+    );
+    if (legacyKey == null) {
+      return KachePersistenceRead<T>(entry: entry);
+    }
     return KachePersistenceRead<T>(
-      entry: KachePersistedEntry<T>(
-        data: data,
-        metadata: KachePersistedMetadata(
-          fetchedAt: envelope.fetchedAt,
-          isInvalidated: envelope.isInvalidated,
-        ),
+      entry: entry,
+      maintenance: () => _rewriteAdapterKey(
+        physicalKey: physicalKey,
+        legacyKey: legacyKey,
+        expectedRaw: raw,
       ),
     );
   }
 
   Future<void> _writeAdapter<T>({
-    required KacheKey key,
+    required String physicalKey,
+    required String? legacyKey,
     required HiveCeAdapterBinding<T> binding,
     required KachePersistedEntry<T> entry,
   }) async {
@@ -63,7 +78,10 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
       data: entry.data,
     );
     try {
-      await box.put(key.storageKey, record);
+      await box.put(physicalKey, record);
+      if (legacyKey != null) {
+        await box.delete(legacyKey);
+      }
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.write,
@@ -74,18 +92,19 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
     }
   }
 
-  void _ensureExistingAdapterCompatible(KacheKey key, int typeId) {
-    late final Object? raw;
-    try {
-      raw = box.get(key.storageKey);
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.write,
-        stage: KachePersistenceStage.backend,
-        cause: error,
-        stackTrace: stackTrace,
-      );
+  void _ensureExistingAdapterCompatible(
+    String physicalKey,
+    String? legacyKey,
+    int typeId,
+  ) {
+    _checkAdapterAtKey(physicalKey, typeId);
+    if (legacyKey != null) {
+      _checkAdapterAtKey(legacyKey, typeId);
     }
+  }
+
+  void _checkAdapterAtKey(String key, int typeId) {
+    final raw = _safeGet(key, KachePersistenceOperation.write);
     if (raw == null) {
       return;
     }

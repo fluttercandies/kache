@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:hive_ce/hive_ce.dart';
 import 'package:kache/kache.dart';
 import 'package:kache_hive_ce/kache_hive_ce.dart';
+import 'package:kache_hive_ce/src/adapter_envelope.dart';
+import 'package:kache_hive_ce/src/envelope.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -30,7 +32,10 @@ void main() {
         ),
       ),
     );
-    expect(first.box.get(key.storageKey), isA<Uint8List>());
+    expect(
+      first.box.get(_findFirstPhysicalKey(first.box)),
+      isA<Uint8List>(),
+    );
     await first.close();
 
     final second = await HiveCeKacheStore.open(
@@ -52,13 +57,54 @@ void main() {
       boxName: _boxName('shared'),
       bytes: Uint8List(0),
     );
-    final second = await HiveCeKacheStore.open(boxName: first.box.name);
+    final second = await HiveCeKacheStore.open(
+      boxName: first.box.name,
+      bytes: Uint8List(0),
+    );
 
     await first.close();
     expect(second.box.isOpen, isTrue);
 
     await second.close();
     expect(second.box.isOpen, isFalse);
+  });
+  test('a pending shared lease prevents the box from closing', () async {
+    final first = await HiveCeKacheStore.open(
+      boxName: _boxName('pending-shared'),
+      bytes: Uint8List(0),
+    );
+    final pendingSecond = HiveCeKacheStore.open(
+      boxName: first.box.name,
+      bytes: Uint8List(0),
+    );
+
+    await first.close();
+    final second = await pendingSecond;
+
+    expect(second.box.isOpen, isTrue);
+    await second.close();
+    expect(second.box.isOpen, isFalse);
+  });
+
+  test('concurrent reopen waits for the final managed lease to close',
+      () async {
+    final boxName = _boxName('close-reopen');
+    final first = await HiveCeKacheStore.open(
+      boxName: boxName,
+      bytes: Uint8List(0),
+    );
+    final firstBox = first.box;
+
+    final close = first.close();
+    final reopened = await HiveCeKacheStore.open(
+      boxName: boxName,
+      bytes: Uint8List(0),
+    );
+    await close;
+
+    expect(reopened.box, isNot(same(firstBox)));
+    expect(reopened.box.isOpen, isTrue);
+    await reopened.close();
   });
 
   test('an externally opened box is borrowed by open factory', () async {
@@ -220,7 +266,10 @@ void main() {
         ),
       );
 
-      expect(first.box.get(key.storageKey), isA<List<Object?>>());
+      expect(
+        first.box.get(_findFirstPhysicalKey(first.box)),
+        isA<List<Object?>>(),
+      );
       await first.close();
 
       final second = await HiveCeKacheStore.open(
@@ -325,6 +374,19 @@ void main() {
       );
       await store.close();
     });
+    test('rejects an adapter whose value type cannot encode the binding',
+        () async {
+      final store = await HiveCeKacheStore.open(
+        boxName: _boxName('adapter-value-type'),
+        bytes: Uint8List(0),
+      );
+
+      expect(
+        () => store.bindAdapter<String>(const _ProfileAdapter()),
+        throwsArgumentError,
+      );
+      await store.close();
+    });
 
     test('rejects an adapter that is not registered with the store Hive',
         () async {
@@ -398,11 +460,20 @@ void main() {
           metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
         ),
       );
+      await store.box.put(
+        _findFirstPhysicalKey(store.box),
+        HiveCeAdapterEnvelope.encode(
+          fetchedAt: DateTime.utc(2026),
+          isInvalidated: false,
+          typeId: _OtherAdapter.typeIdValue,
+          data: const _Other(),
+        ),
+      );
 
       await expectLater(
         store.read<_Profile>(
           key: key,
-          binding: store.bindAdapter<_Profile>(const _OtherAdapter()),
+          binding: store.bindAdapter<_Profile>(const _ProfileAdapter()),
         ),
         throwsA(isA<KachePersistenceException>()),
       );
@@ -433,6 +504,679 @@ void main() {
       );
       await store.close();
     });
+
+    test(
+      'legacy adapter key migration never overwrites a replaced legacy value',
+      () async {
+        final store = await HiveCeKacheStore.open(
+          boxName: _boxName('adapter-legacy-race'),
+          bytes: Uint8List(0),
+        );
+        final binding = store.bindAdapter<_Profile>(const _ProfileAdapter());
+        final key = KacheKey('adapter-legacy');
+        final legacyRecord = HiveCeAdapterEnvelope.encode(
+          fetchedAt: DateTime.utc(2026),
+          isInvalidated: false,
+          typeId: _ProfileAdapter.typeIdValue,
+          data: const _Profile(1, 'original'),
+        );
+        await store.box.put(key.storageKey, legacyRecord);
+
+        final read = await store.read<_Profile>(key: key, binding: binding);
+        expect(read?.entry.data, const _Profile(1, 'original'));
+        expect(read?.hasMaintenance, isTrue);
+
+        final updatedRecord = HiveCeAdapterEnvelope.encode(
+          fetchedAt: DateTime.utc(2026, 2),
+          isInvalidated: false,
+          typeId: _ProfileAdapter.typeIdValue,
+          data: const _Profile(2, 'updated'),
+        );
+        await store.box.put(key.storageKey, updatedRecord);
+
+        await read?.runMaintenance();
+
+        expect(store.box.get(key.storageKey), isNotNull);
+        expect(
+          store.box.keys
+              .whereType<String>()
+              .where((boxKey) => boxKey.startsWith('kache:2:')),
+          isEmpty,
+        );
+
+        final read2 = await store.read<_Profile>(key: key, binding: binding);
+        expect(read2?.entry.data, const _Profile(2, 'updated'));
+        await store.close();
+      },
+    );
+    test('adapter maintenance cannot mutate a borrowed box after close',
+        () async {
+      final boxName = _boxName('adapter-maintenance-after-close');
+      final box = await Hive.openBox<Object?>(boxName, bytes: Uint8List(0));
+      final store = HiveCeKacheStore.fromBox(box);
+      final binding = store.bindAdapter<_Profile>(const _ProfileAdapter());
+      final key = KacheKey('adapter-maintenance-after-close');
+      await box.put(
+        key.storageKey,
+        HiveCeAdapterEnvelope.encode(
+          fetchedAt: DateTime.utc(2026),
+          isInvalidated: false,
+          typeId: _ProfileAdapter.typeIdValue,
+          data: const _Profile(1, 'before-close'),
+        ),
+      );
+
+      final read = await store.read<_Profile>(key: key, binding: binding);
+      expect(read?.hasMaintenance, isTrue);
+      await store.close();
+      expect(box.isOpen, isTrue);
+
+      await expectLater(
+        read?.runMaintenance(),
+        throwsA(
+          isA<KachePersistenceException>()
+              .having(
+                (error) => error.operation,
+                'operation',
+                KachePersistenceOperation.read,
+              )
+              .having(
+                (error) => error.stage,
+                'stage',
+                KachePersistenceStage.migration,
+              ),
+        ),
+      );
+      expect(box.get(key.storageKey), isNotNull);
+      expect(
+        box.keys
+            .whereType<String>()
+            .where((value) => value.startsWith('kache:2:')),
+        isEmpty,
+      );
+      await box.close();
+    });
+  });
+
+  group('hashed physical keys', () {
+    test('long logical key round-trips across close and reopen', () async {
+      final directory = await Directory.systemTemp.createTemp('kache_long_');
+      addTearDown(() => directory.delete(recursive: true));
+      final boxName = _boxName('long-key');
+      final longPart = 'x' * 300;
+      final key = KacheKey('long-namespace', [longPart]);
+      expect(key.storageKey.length, greaterThan(255));
+
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        path: directory.path,
+      );
+      await first.write<String>(
+        key: key,
+        binding: _stringBinding(first),
+        entry: KachePersistedEntry<String>(
+          data: 'long-value',
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      final physicalKey = _findFirstPhysicalKey(first.box);
+      expect(physicalKey.length, lessThan(255));
+      await first.close();
+
+      final second = await HiveCeKacheStore.open(
+        boxName: boxName,
+        path: directory.path,
+      );
+      final read = await second.read<String>(
+        key: key,
+        binding: _stringBinding(second),
+      );
+      expect(read?.entry.data, 'long-value');
+      await second.close();
+    });
+
+    test('SHA and HMAC strategies produce different physical keys', () async {
+      final shaStore = await HiveCeKacheStore.open(
+        boxName: _boxName('sha-strategy'),
+        bytes: Uint8List(0),
+      );
+      final hmacStore = await HiveCeKacheStore.open(
+        boxName: _boxName('hmac-strategy'),
+        bytes: Uint8List(0),
+        keyStrategy: HiveCeKeyStrategy.hmacSha256(
+          List<int>.generate(32, (i) => i + 1),
+        ),
+      );
+      final key = KacheKey('test', ['value']);
+
+      await shaStore.write<String>(
+        key: key,
+        binding: _stringBinding(shaStore),
+        entry: KachePersistedEntry<String>(
+          data: 'sha',
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      await hmacStore.write<String>(
+        key: key,
+        binding: _stringBinding(hmacStore),
+        entry: KachePersistedEntry<String>(
+          data: 'hmac',
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+
+      final shaPhysical = _findFirstPhysicalKey(shaStore.box);
+      final hmacPhysical = _findFirstPhysicalKey(hmacStore.box);
+      expect(shaPhysical.startsWith('kache:2:s:'), isTrue);
+      expect(hmacPhysical.startsWith('kache:2:h:'), isTrue);
+      expect(shaPhysical, isNot(equals(hmacPhysical)));
+
+      await shaStore.close();
+      await hmacStore.close();
+    });
+
+    test('HMAC physical key does not contain canonical key material', () async {
+      final store = await HiveCeKacheStore.open(
+        boxName: _boxName('hmac-opaque'),
+        bytes: Uint8List(0),
+        keyStrategy: HiveCeKeyStrategy.hmacSha256(
+          List<int>.generate(32, (i) => i + 7),
+        ),
+      );
+      final key = KacheKey('sensitive-namespace', ['secret-data', 42]);
+      await store.write<String>(
+        key: key,
+        binding: _stringBinding(store),
+        entry: KachePersistedEntry<String>(
+          data: 'v',
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      final physicalKey = _findFirstPhysicalKey(store.box);
+      expect(physicalKey.contains('sensitive-namespace'), isFalse);
+      expect(physicalKey.contains('secret-data'), isFalse);
+      await store.close();
+    });
+
+    test('HMAC strategy rejects a secret shorter than 32 bytes', () {
+      expect(
+        () => HiveCeKeyStrategy.hmacSha256(List.filled(31, 0)),
+        throwsArgumentError,
+      );
+    });
+
+    test(
+      'legacy canonical key migrates to hashed key on read',
+      () async {
+        final store = await HiveCeKacheStore.open(
+          boxName: _boxName('legacy-migrate'),
+          bytes: Uint8List(0),
+        );
+        final key = KacheKey('profile');
+        final binding = _stringBinding(store);
+        final legacyRecord = HiveCeEnvelope.encode(
+          fetchedAt: DateTime.utc(2026),
+          isInvalidated: false,
+          schema: 1,
+          codecId: 'utf8-string',
+          payload: Uint8List.fromList(utf8.encode('legacy-data')),
+        );
+        await store.box.put(key.storageKey, legacyRecord);
+
+        final read = await store.read<String>(key: key, binding: binding);
+        expect(read?.entry.data, 'legacy-data');
+        expect(read?.hasMaintenance, isTrue);
+
+        await read?.runMaintenance();
+
+        expect(store.box.get(key.storageKey), isNull);
+        expect(
+          store.box.keys.whereType<String>().where(_isManagedKey).length,
+          1,
+        );
+
+        final read2 = await store.read<String>(key: key, binding: binding);
+        expect(read2?.entry.data, 'legacy-data');
+        expect(read2?.hasMaintenance, isFalse);
+
+        await store.close();
+      },
+    );
+
+    test('clear preserves non-kache and pseudo-prefix host data', () async {
+      final box = await Hive.openBox<Object?>(
+        _boxName('borrowed-clear'),
+        bytes: Uint8List(0),
+      );
+      final store = HiveCeKacheStore.fromBox(
+        box,
+        ownership: HiveCeBoxOwnership.owned,
+      );
+      final key = KacheKey('managed');
+      await store.write<String>(
+        key: key,
+        binding: _stringBinding(store),
+        entry: KachePersistedEntry<String>(
+          data: 'managed-data',
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      await box.put(42, 'int-data');
+      await box.put('foreign-key', 'foreign-data');
+      await box.put('kache:2:evil', 'pseudo-prefix-1');
+      await box.put('kache:2:s:short', 'pseudo-prefix-2');
+      await box.put(
+        'kache:2:s:${'a' * 43}:${'b' * 10}',
+        'pseudo-prefix-short-suffix',
+      );
+      await box.put('k1fake-key', 'pseudo-prefix-3');
+      await box.put('k1:', 'pseudo-prefix-empty-ns');
+
+      await store.clear();
+
+      expect(
+        await store.read<String>(key: key, binding: _stringBinding(store)),
+        isNull,
+      );
+      expect(box.get(42), 'int-data');
+      expect(box.get('foreign-key'), 'foreign-data');
+      expect(box.get('kache:2:evil'), 'pseudo-prefix-1');
+      expect(box.get('kache:2:s:short'), 'pseudo-prefix-2');
+      expect(
+        box.get('kache:2:s:${'a' * 43}:${'b' * 10}'),
+        'pseudo-prefix-short-suffix',
+      );
+      expect(box.get('k1fake-key'), 'pseudo-prefix-3');
+      expect(box.get('k1:'), 'pseudo-prefix-empty-ns');
+      await store.close();
+    });
+
+    test(
+      'clearNamespace preserves pseudo-prefix and foreign namespace keys',
+      () async {
+        final store = await HiveCeKacheStore.open(
+          boxName: _boxName('ns-clear'),
+          bytes: Uint8List(0),
+        );
+        final binding = _stringBinding(store);
+        final nsKey = KacheKey('accounts', [1]);
+        final otherKey = KacheKey('account-settings', [1]);
+        await store.write<String>(
+          key: nsKey,
+          binding: binding,
+          entry: KachePersistedEntry<String>(
+            data: 'ns-data',
+            metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+          ),
+        );
+        await store.write<String>(
+          key: otherKey,
+          binding: binding,
+          entry: KachePersistedEntry<String>(
+            data: 'other-data',
+            metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+          ),
+        );
+        await store.box.put('foreign-key', 'foreign-data');
+
+        await store.clearNamespace(namespace: KacheNamespace('accounts'));
+
+        expect(
+          await store.read<String>(key: nsKey, binding: binding),
+          isNull,
+        );
+        expect(
+          (await store.read<String>(key: otherKey, binding: binding))
+              ?.entry
+              .data,
+          'other-data',
+        );
+        expect(store.box.get('foreign-key'), 'foreign-data');
+        await store.close();
+      },
+    );
+  });
+
+  group('open exception and cipher lease', () {
+    test('strategy lease mismatch fails open', () async {
+      final boxName = _boxName('strategy-mismatch');
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+      );
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          keyStrategy: HiveCeKeyStrategy.hmacSha256(
+            List<int>.generate(32, (i) => i + 1),
+          ),
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('cipher mismatch fails open for a managed lease', () async {
+      final boxName = _boxName('cipher-mismatch');
+      final cipher = HiveAesCipher(List<int>.generate(32, (i) => i));
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+        encryptionCipher: cipher,
+      );
+      final otherCipher = HiveAesCipher(
+        List<int>.generate(32, (i) => i + 1),
+      );
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          encryptionCipher: otherCipher,
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('cipher downgrade fails open for a managed lease', () async {
+      final boxName = _boxName('cipher-downgrade');
+      final cipher = HiveAesCipher(List<int>.generate(32, (i) => i));
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+        encryptionCipher: cipher,
+      );
+      await expectLater(
+        HiveCeKacheStore.open(boxName: boxName),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('cipher provided for a borrowed box fails open', () async {
+      final boxName = _boxName('borrowed-cipher');
+      final box = await Hive.openBox<Object?>(boxName, bytes: Uint8List(0));
+      final cipher = HiveAesCipher(List<int>.generate(32, (i) => i));
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          encryptionCipher: cipher,
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await box.close();
+    });
+
+    test('async Hive I/O failure wraps as HiveCeOpenException', () async {
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: _boxName('corrupt-bytes'),
+          bytes: Uint8List.fromList(List.generate(50, (i) => i)),
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+    });
+
+    test('HiveCeOpenException toString is sanitized', () async {
+      final boxName = _boxName('sanitized');
+      final box = await Hive.openBox<Object?>(boxName, bytes: Uint8List(0));
+      final cipher = HiveAesCipher(List<int>.generate(32, (i) => i));
+      HiveCeOpenException? caught;
+      try {
+        await HiveCeKacheStore.open(
+          boxName: boxName,
+          encryptionCipher: cipher,
+        );
+      } on HiveCeOpenException catch (error) {
+        caught = error;
+      }
+      await box.close();
+      expect(caught, isNotNull);
+      final str = caught.toString();
+      expect(str.contains(boxName), isFalse);
+      expect(str.contains('cipher'), isFalse);
+    });
+  });
+
+  group('lease descriptor', () {
+    test(
+      'same CRC but different cipher object fails open',
+      () async {
+        final boxName = _boxName('same-crc-diff-obj');
+        final key = List<int>.generate(32, (i) => i);
+        final cipherA = HiveAesCipher(key);
+        final first = await HiveCeKacheStore.open(
+          boxName: boxName,
+          bytes: Uint8List(0),
+          encryptionCipher: cipherA,
+        );
+        final cipherB = HiveAesCipher(key);
+        // Same key material → same CRC, but different object.
+        await expectLater(
+          HiveCeKacheStore.open(
+            boxName: boxName,
+            bytes: Uint8List(0),
+            encryptionCipher: cipherB,
+          ),
+          throwsA(isA<HiveCeOpenException>()),
+        );
+        await first.close();
+      },
+    );
+
+    test('same cipher object allows shared managed lease', () async {
+      final boxName = _boxName('same-cipher-shared');
+      final cipher = HiveAesCipher(List<int>.generate(32, (i) => i));
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+        encryptionCipher: cipher,
+      );
+      final second = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+        encryptionCipher: cipher,
+      );
+      await first.close();
+      expect(second.box.isOpen, isTrue);
+      await second.close();
+    });
+
+    test('path mismatch fails open for a managed lease', () async {
+      final directory = await Directory.systemTemp.createTemp('kache_path_');
+      addTearDown(() => directory.delete(recursive: true));
+      final boxName = _boxName('path-mismatch');
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        path: directory.path,
+      );
+      await expectLater(
+        HiveCeKacheStore.open(boxName: boxName),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('bytes mode mismatch fails open for a managed lease', () async {
+      final boxName = _boxName('bytes-mismatch');
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+      );
+      await expectLater(
+        HiveCeKacheStore.open(boxName: boxName),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('bytes content mismatch fails open for a managed lease', () async {
+      final boxName = _boxName('bytes-content-mismatch');
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+      );
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          bytes: Uint8List.fromList([1, 2, 3]),
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('crash recovery mismatch fails open for a managed lease', () async {
+      final boxName = _boxName('crash-mismatch');
+      final first = await HiveCeKacheStore.open(
+        boxName: boxName,
+        bytes: Uint8List(0),
+        crashRecovery: false,
+      );
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          bytes: Uint8List(0),
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await first.close();
+    });
+
+    test('path and bytes both non-null throws ArgumentError', () async {
+      final directory = await Directory.systemTemp.createTemp('kache_both_');
+      addTearDown(() => directory.delete(recursive: true));
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: _boxName('path-bytes-both'),
+          path: directory.path,
+          bytes: Uint8List(0),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'sanitized message',
+            isNot(contains(directory.path)),
+          ),
+        ),
+      );
+    });
+
+    test('borrowed box rejects path, bytes, crashRecovery=false', () async {
+      final boxName = _boxName('borrowed-config');
+      final box = await Hive.openBox<Object?>(boxName, bytes: Uint8List(0));
+      final directory = await Directory.systemTemp.createTemp('kache_bp_');
+      addTearDown(() async {
+        await box.close();
+        await directory.delete(recursive: true);
+      });
+
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          path: directory.path,
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          bytes: Uint8List(0),
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          crashRecovery: false,
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+    });
+    test('borrowed box pins the strategy while a lease is active', () async {
+      final boxName = _boxName('borrowed-strategy');
+      final box = await Hive.openBox<Object?>(boxName, bytes: Uint8List(0));
+      addTearDown(() async {
+        if (box.isOpen) {
+          await box.close();
+        }
+      });
+      final first = await HiveCeKacheStore.open(boxName: boxName);
+
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          keyStrategy: HiveCeKeyStrategy.hmacSha256(
+            List<int>.generate(32, (index) => index),
+          ),
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+
+      await first.close();
+    });
+  });
+
+  group('cipher safety', () {
+    test('throwing calculateKeyCrc wraps as HiveCeOpenException', () async {
+      final boxName = _boxName('throwing-cipher');
+      final cipher = _ThrowingCipher();
+      await expectLater(
+        HiveCeKacheStore.open(
+          boxName: boxName,
+          bytes: Uint8List(0),
+          encryptionCipher: cipher,
+        ),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+      // No lease state should have been registered.
+      expect(Hive.isBoxOpen(boxName), isFalse);
+    });
+
+    test(
+      'throwing calculateKeyCrc on second open wraps without orphaning',
+      () async {
+        final boxName = _boxName('throwing-second');
+        final cipher = _ThrowingCipher(throwAfterFirstCall: true);
+        final first = await HiveCeKacheStore.open(
+          boxName: boxName,
+          bytes: Uint8List(0),
+          encryptionCipher: cipher,
+        );
+        // Second open re-evaluates cipher identity; it throws again.
+        await expectLater(
+          HiveCeKacheStore.open(
+            boxName: boxName,
+            bytes: Uint8List(0),
+            encryptionCipher: cipher,
+          ),
+          throwsA(isA<HiveCeOpenException>()),
+        );
+        // The first lease must still be usable.
+        expect(first.box.isOpen, isTrue);
+        await first.close();
+      },
+    );
+  });
+
+  group('HMAC secret validation', () {
+    test('rejects secret with negative byte value', () {
+      expect(
+        () => HiveCeKeyStrategy.hmacSha256(
+          List<int>.filled(32, -1),
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('rejects secret with byte value above 255', () {
+      expect(
+        () => HiveCeKeyStrategy.hmacSha256(
+          List<int>.filled(32, 256),
+        ),
+        throwsArgumentError,
+      );
+    });
   });
 }
 
@@ -444,6 +1188,15 @@ HiveCeBinding<String> _stringBinding(HiveCeKacheStore store) => store.bind(
         decode: (bytes) => utf8.decode(bytes),
       ),
     );
+
+String _findFirstPhysicalKey(Box<Object?> box) =>
+    box.keys.whereType<String>().firstWhere((k) => k.startsWith('kache:2:'));
+
+final _testManagedKeyPattern = RegExp(
+  r'^(kache:2:[sh]:[A-Za-z0-9_-]{43}:[A-Za-z0-9_-]{43}|k1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]*)$',
+);
+
+bool _isManagedKey(String key) => _testManagedKeyPattern.hasMatch(key);
 
 String _boxName(String label) =>
     'kache_${label}_${DateTime.now().microsecondsSinceEpoch}';
@@ -558,4 +1311,43 @@ final class _MaximumAdapter extends TypeAdapter<_Maximum> {
 
   @override
   void write(BinaryWriter writer, _Maximum obj) => writer.writeInt(obj.value);
+}
+
+final class _ThrowingCipher implements HiveCipher {
+  _ThrowingCipher({this.throwAfterFirstCall = false});
+
+  final bool throwAfterFirstCall;
+  var _callCount = 0;
+  @override
+  int calculateKeyCrc() {
+    _callCount++;
+    if (!throwAfterFirstCall || _callCount > 1) {
+      throw StateError('cipher crc computation failed');
+    }
+    return 42;
+  }
+
+  @override
+  int maxEncryptedSize(Uint8List inp) =>
+      throw StateError('should not be called');
+
+  @override
+  int encrypt(
+    Uint8List inp,
+    int inpOff,
+    int inpLength,
+    Uint8List out,
+    int outOff,
+  ) =>
+      throw StateError('should not be called');
+
+  @override
+  int decrypt(
+    Uint8List inp,
+    int inpOff,
+    int inpLength,
+    Uint8List out,
+    int outOff,
+  ) =>
+      throw StateError('should not be called');
 }

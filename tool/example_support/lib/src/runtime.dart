@@ -38,10 +38,18 @@ final class ExampleRuntime {
         closeNetwork: networkClient.close,
         network: ConnectivityPlusNetwork(),
       );
-    } on Object {
-      await store?.close();
-      networkClient.close();
-      rethrow;
+    } on Object catch (error, stackTrace) {
+      try {
+        await store?.close();
+      } on Object {
+        // Preserve the first construction failure after attempting cleanup.
+      }
+      try {
+        networkClient.close();
+      } on Object {
+        // Preserve the first construction failure after attempting cleanup.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
     }
   }
 
@@ -149,6 +157,7 @@ final class ExampleRuntime {
 
   final void Function() _closeNetwork;
   Future<void>? _closeFuture;
+  bool _isClosed = false;
 
   /// Gateway used to build queries; retained so the persistence demo can share
   /// the same fetcher.
@@ -159,6 +168,12 @@ final class ExampleRuntime {
   /// Lazily builds the persistence-API demo (fromBox/ownership, migrator,
   /// encrypted box, MemoryKachePersistence). The result is cached.
   Future<PersistenceDemo> persistenceDemo({required String boxPrefix}) {
+    if (_isClosed) {
+      throw const KacheLifecycleException(
+        'runtime_closed',
+        'The example runtime is closed.',
+      );
+    }
     final existing = _persistenceDemoFuture;
     if (existing != null) {
       return existing;
@@ -168,6 +183,16 @@ final class ExampleRuntime {
       boxPrefix: boxPrefix,
     );
     _persistenceDemoFuture = future;
+    unawaited(
+      future.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          if (identical(_persistenceDemoFuture, future)) {
+            _persistenceDemoFuture = null;
+          }
+        },
+      ),
+    );
     return future;
   }
 
@@ -177,8 +202,18 @@ final class ExampleRuntime {
     if (existing != null) {
       return existing;
     }
-    final future = _performClose();
+    _isClosed = true;
+    final completion = Completer<void>();
+    final future = completion.future;
     _closeFuture = future;
+    unawaited(
+      _performClose().then<void>(
+        (_) => completion.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completion.completeError(error, stackTrace);
+        },
+      ),
+    );
     return future;
   }
 
@@ -189,22 +224,49 @@ final class ExampleRuntime {
     }
     final future = Hive.initFlutter('kache_examples');
     _hiveInitialization = future;
+    unawaited(
+      future.then<void>(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          if (identical(_hiveInitialization, future)) {
+            _hiveInitialization = null;
+          }
+        },
+      ),
+    );
     return future;
   }
 
   Future<void> _performClose() async {
-    try {
-      final demo = _persistenceDemoFuture;
-      if (demo != null) {
-        try {
-          await (await demo).close();
-        } on Object {
-          // Persistence demo close failures must not mask the main client close.
-        }
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    void record(Object error, StackTrace stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+
+    final demo = _persistenceDemoFuture;
+    if (demo != null) {
+      try {
+        await (await demo).close();
+      } on Object catch (error, stackTrace) {
+        record(error, stackTrace);
       }
+    }
+    try {
       await client.close();
-    } finally {
+    } on Object catch (error, stackTrace) {
+      record(error, stackTrace);
+    }
+    try {
       _closeNetwork();
+    } on Object catch (error, stackTrace) {
+      record(error, stackTrace);
+    }
+
+    final error = firstError;
+    if (error != null) {
+      Error.throwWithStackTrace(error, firstStackTrace!);
     }
   }
 }

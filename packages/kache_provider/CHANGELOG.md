@@ -1,3 +1,8 @@
+## 2.0.1
+
+- Made client replacement transactional so a failed controller construction
+  preserves the active Provider binding.
+
 ## 2.0.0
 
 - Exposed key-scoped cancellation through the existing `KacheController`.

@@ -1,3 +1,28 @@
+## 2.1.0
+
+- Added `HiveCeKeyStrategy` with domain-separated SHA-256 (default) and
+  HMAC-SHA-256 keyed strategies. Physical keys are fixed-length digests that do
+  not embed canonical key material and remain under Hive CE's 255-byte limit;
+  the documentation states deterministic SHA-256's equality and dictionary
+  attack limitations.
+- Added `HiveCeOpenException` wrapping all cipher lease mismatches, strategy
+  lease mismatches, and asynchronous Hive I/O failures during box acquisition.
+  Its `toString` is sanitized.
+- Added cipher identity pinning: concurrent opens sharing an active managed-box
+  lease reject a different cipher object, type, or key CRC. Borrowed boxes
+  reject any supplied cipher because it cannot be verified.
+- Added race-safe lazy migration from 2.0.0 canonical `k1:` keys to the new
+  hashed format.
+- Added strict managed-key grammar for selective `clear()` and
+  `clearNamespace()`, preserving host keys that only resemble Kache prefixes.
+- Added `crypto` ^3.0.7 as a direct dependency.
+- Reserved pending shared-box acquisitions before awaiting `openBox`, preventing
+  an earlier lease from closing the box returned to a concurrent opener.
+- Enforced store closure for deferred native-adapter maintenance and rejected
+  `bindAdapter<T>` calls whose adapter cannot encode `T`.
+- Removed filesystem paths from the mutually exclusive `path`/`bytes`
+  argument error.
+
 ## 2.0.0
 
 - Updated the Kache core range for trace/span persistence events and reasoned

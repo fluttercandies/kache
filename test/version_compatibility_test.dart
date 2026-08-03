@@ -47,11 +47,33 @@ const _publishedFlutterConstraints = <String, String>{
   'packages/kache_provider': '>=3.24.0',
 };
 
+const _workspaceExpectedVersions = <String, String>{
+  '.': '2.0.0',
+  'packages/kache': '2.0.1',
+  'packages/kache_flutter': '2.0.1',
+  'packages/kache_flutter_hooks': '2.0.0',
+  'packages/kache_hive_ce': '2.1.0',
+  'packages/kache_hooks_riverpod': '2.0.0',
+  'packages/kache_riverpod': '2.0.0',
+  'packages/kache_bloc': '2.0.1',
+  'packages/kache_connectivity_plus': '2.0.1',
+  'packages/kache_provider': '2.0.1',
+  'examples/kache_flutter_example': '2.0.0',
+  'examples/kache_riverpod_example': '2.0.0',
+  'examples/kache_bloc_example': '2.0.0',
+  'examples/kache_provider_example': '2.0.0',
+  'tool/contract_tests': '2.0.0',
+  'tool/example_support': '2.0.0',
+};
+
 void main() {
-  test('workspace package versions are aligned for the major release', () {
+  test('workspace package versions match their expected release map', () {
     for (final path in _workspacePackagePaths) {
-      final pubspec = _pubspec(path);
-      expect(pubspec['version'], '2.0.0', reason: path);
+      expect(
+        _pubspec(path)['version'],
+        _workspaceExpectedVersions[path],
+        reason: path,
+      );
     }
   });
 
@@ -117,6 +139,7 @@ void main() {
   });
 
   test('framework and persistence constraints match the supported matrix', () {
+    _expectDependency('packages/kache_hive_ce', 'crypto', '^3.0.7');
     _expectDependency('packages/kache_hive_ce', 'hive_ce', '^2.19.3');
     _expectDependency(
       'packages/kache_flutter_hooks',
@@ -235,11 +258,12 @@ void main() {
     }
   });
 
-  test('every published changelog starts with the major release', () {
+  test('every published changelog starts with its expected release', () {
     for (final path in _packagePaths) {
+      final expected = _workspaceExpectedVersions[path]!;
       expect(
         File('$path/CHANGELOG.md').readAsStringSync(),
-        startsWith('## 2.0.0\n'),
+        startsWith('## $expected\n'),
         reason: path,
       );
     }

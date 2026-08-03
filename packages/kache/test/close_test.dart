@@ -114,6 +114,42 @@ void main() {
     expect(backend.isClosed, isFalse);
   });
 
+  test('borrowed persistence reads do not block client close', () async {
+    final backend = ScriptedPersistence();
+    final readStarted = Completer<void>();
+    final readGate = Completer<void>();
+    final readFinished = Completer<void>();
+    backend.onRead = () async {
+      readStarted.complete();
+      try {
+        await readGate.future;
+      } finally {
+        readFinished.complete();
+      }
+    };
+    final client = KacheClient(persistence: backend);
+    final resource = client.watch(
+      KacheQuery<String>.persisted(
+        key: KacheKey('borrowed-read-close'),
+        binding: backend.bind<String>(fingerprint: 'value-v1'),
+        fetch: (_) async => 'network',
+      ),
+    );
+    final load = resource.load();
+    await readStarted.future;
+
+    try {
+      await client.close().timeout(const Duration(seconds: 1));
+    } finally {
+      readGate.complete();
+    }
+    await load;
+    await readFinished.future;
+
+    expect(resource.isDisposed, isTrue);
+    expect(backend.closeCount, 0);
+  });
+
   test('close is idempotent and the first drain mode wins', () async {
     final client = KacheClient();
 
@@ -122,6 +158,24 @@ void main() {
 
     expect(second, same(first));
     await Future.wait(<Future<void>>[first, second]);
+  });
+
+  test('close remains idempotent during synchronous event callbacks', () async {
+    final client = KacheClient();
+    Future<void>? reentrant;
+    final subscription = client.events.listen((event) {
+      if (reentrant == null &&
+          event.kind == KacheEventKind.close &&
+          event.phase == KacheEventPhase.started) {
+        reentrant = client.close(drainWrites: false);
+      }
+    });
+
+    final first = client.close();
+
+    expect(reentrant, same(first));
+    await first;
+    await subscription.cancel();
   });
 
   test('owned backend close waits for an active clear operation', () async {

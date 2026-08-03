@@ -71,9 +71,13 @@ final class _KacheProviderState<T> extends SingleChildState<KacheProvider<T>> {
     }
     final controller = _controller;
     if (controller == null || !identical(_boundClient, client)) {
-      controller?.dispose();
+      final replacement = KacheController<T>(
+        client: client,
+        query: widget.query,
+      );
       _boundClient = client;
-      _controller = KacheController<T>(client: client, query: widget.query);
+      _controller = replacement;
+      controller?.dispose();
       return;
     }
     controller.updateQuery(widget.query);

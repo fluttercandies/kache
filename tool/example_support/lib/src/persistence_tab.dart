@@ -79,12 +79,13 @@ final class _PersistencePlaygroundHostState
         detail: 'codecId=${demo.migratorBinding.codecId}',
       ),
       PersistenceCapabilityModel(
-        title: 'Encrypted box',
+        title: 'Encrypted box + protected physical keys',
         description:
-            'Open a box with a HiveCipher. Kache never holds or logs the key; '
-            'the cipher is owned by the caller.',
-        api: 'HiveCeKacheStore.open(boxName, encryptionCipher: cipher)',
-        status: 'encrypted',
+            'Open with a caller-owned HiveCipher and an independent HMAC key '
+            'strategy. Values and low-entropy logical key metadata are both '
+            'protected at rest.',
+        api: 'HiveCeKacheStore.open(encryptionCipher, keyStrategy: hmacSha256)',
+        status: 'encrypted + HMAC keys',
         detail: 'fingerprint=${demo.encryptedStore.box.name}',
       ),
       PersistenceCapabilityModel(

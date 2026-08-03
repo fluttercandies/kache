@@ -27,6 +27,82 @@ void main() {
   });
 
   test(
+    'close finishes owned cleanup before surfacing a network error',
+    () async {
+      final store = await HiveCeKacheStore.open(
+        boxName: 'example_runtime_close_error',
+        bytes: Uint8List(0),
+      );
+      final closeError = StateError('network client close failed');
+      var closeCount = 0;
+      final runtime = ExampleRuntime.fromDependencies(
+        store: store,
+        gateway: _FakeRepositoryGateway(_profile()),
+        closeNetwork: () {
+          closeCount += 1;
+          throw closeError;
+        },
+      );
+
+      final closing = runtime.close();
+      await expectLater(closing, throwsA(same(closeError)));
+      await expectLater(runtime.close(), throwsA(same(closeError)));
+
+      expect(closeCount, 1);
+      expect(runtime.client.isClosed, isTrue);
+      expect(store.box.isOpen, isFalse);
+    },
+  );
+
+  test('close remains idempotent during client event callbacks', () async {
+    final store = await HiveCeKacheStore.open(
+      boxName: 'example_runtime_reentrant_close',
+      bytes: Uint8List(0),
+    );
+    final runtime = ExampleRuntime.fromDependencies(
+      store: store,
+      gateway: _FakeRepositoryGateway(_profile()),
+    );
+    Future<void>? reentrant;
+    final subscription = runtime.client.events.listen((event) {
+      if (reentrant == null &&
+          event.kind == KacheEventKind.close &&
+          event.phase == KacheEventPhase.started) {
+        reentrant = runtime.close();
+      }
+    });
+
+    final first = runtime.close();
+
+    expect(reentrant, same(first));
+    await first;
+    await subscription.cancel();
+  });
+
+  test('rejects opening a persistence demo after close starts', () async {
+    final store = await HiveCeKacheStore.open(
+      boxName: 'example_runtime_closed_demo',
+      bytes: Uint8List(0),
+    );
+    final runtime = ExampleRuntime.fromDependencies(
+      store: store,
+      gateway: _FakeRepositoryGateway(_profile()),
+    );
+    await runtime.close();
+
+    expect(
+      () => runtime.persistenceDemo(boxPrefix: 'closed_runtime'),
+      throwsA(
+        isA<KacheLifecycleException>().having(
+          (error) => error.code,
+          'code',
+          'runtime_closed',
+        ),
+      ),
+    );
+  });
+
+  test(
     'fetches through the gateway and persists the repository profile',
     () async {
       final store = await HiveCeKacheStore.open(

@@ -90,6 +90,9 @@ Future<UserCache> openUserCache(UserApi api, String userId) async {
 type id 范围 `0..65439`，包括 223 以上的扩展 id。native record 支持缓存 nullable
 值，并且与 byte-codec record 严格隔离，两种模式不会互相误读。
 
+native adapter envelope 不会额外提供 Kache schema 或迁移钩子。应按 Hive 规则保持
+adapter 的读取向后兼容；格式演进需要显式 schema 和迁移时，请改用 `bind`。
+
 缓存 payload 需要独立 byte 格式时，使用
 `bind(codecId:, schema:, codec:, migrate:)`。`codecId` 标识模型格式，发布后应保持
 稳定。`schema` 是正的 unsigned 32-bit 版本号。提升 schema 会改变 binding
@@ -97,6 +100,39 @@ fingerprint，因此需要提供 `migrate(payload, fromSchema)` 读取旧 envelo
 
 迁移会先返回类型化数据，随后由 Kache 惰性重写当前 schema。maintenance 写入失败会
 进入 persistence state 和 event，但不会隐藏已读取数据。
+
+## 物理键策略
+
+逻辑 `KacheKey` 通过域分隔摘要映射为固定长度的物理 Hive box 键。物理键不直接编码
+可逆的 canonical key 内容，逻辑键也可以超过 Hive CE 的 255 字节字符串键边界。
+
+默认策略是 `HiveCeKeyStrategy.sha256()`。它对每个键组件应用带固定域前缀和 NUL 分隔
+符的 SHA-256。
+
+**SHA-256 的局限：**
+- 它是确定性摘要：相同的逻辑键产生相同的物理键，因此相等关系仍可观察。
+- 低熵键部分仍可能遭受字典攻击。
+- **切勿**将密钥（API key、token、密码）作为缓存键的一部分。
+
+当缓存键可能包含敏感信息时，使用 `HiveCeKeyStrategy.hmacSha256(secret)`，secret
+为至少 32 字节的密码学随机值。HMAC 策略使没有 secret 的字典攻击不可行。secret 在
+内部被拷贝且永不暴露；其稳定 identity 由 secret 派生但不泄露 secret。不要从 32-bit
+Hive cipher key CRC 派生 secret。
+
+```dart
+final store = await HiveCeKacheStore.open(
+  boxName: 'app-cache',
+  keyStrategy: HiveCeKeyStrategy.hmacSha256(mySecret),
+);
+```
+
+共享同一活动 box lease 的并发 `open` 必须使用 identity 相同的策略；不匹配会抛出
+`HiveCeOpenException`。应将策略及 HMAC secret 视为持久化存储配置。使用不同策略或
+secret 重新打开时，无法找到旧 v2 策略写入的记录，也不会迁移它们。请复用原配置；
+如需有意轮换，先调用 `clear()` 删除所有通过严格语法识别的 Kache 记录。
+
+kache\_hive\_ce 2.0.0 写入的记录（canonical `k1:` 键）会被透明读取，并在下次访问时
+惰性迁移到新的哈希格式。
 
 ## 损坏与错误
 
@@ -113,12 +149,36 @@ fingerprint，因此需要提供 `migrate(payload, fromSchema)` 读取旧 envelo
 `HiveCeKacheStore.fromBox` 包装已打开的加密 `Box<Object?>`。Kache 不保存也不记录
 加密密钥。
 
-## 所有权
+对于 Kache 管理的 box，cipher 在首次打开时通过精确的 cipher 对象（`identical`）、
+其 runtime type 及其 key CRC 固定。后续 `open` 调用必须传入同一个 cipher 对象；不同
+对象——即使具有相同密钥材料——也会抛出 `HiveCeOpenException`。完整的 lease 描述符
+（path、bytes、crash recovery、cipher、key strategy）也会被比较，因此任何配置不匹配
+都会在操作 box 之前安全失败。对外部已打开的 box 传入 cipher 也会失败，因为 cipher
+无法被验证。
+
+## 共享 Box 与 clear 边界
+
+`clear()` 只删除严格匹配 Kache 托管物理键语法的记录，绝不会调用 Hive
+`Box.clear()`。`clearNamespace(namespace)` 只删除带有该 namespace 派生前缀的托管
+记录。即使 `fromBox` 使用 `HiveCeBoxOwnership.owned`，两者也都会保留无关 String
+和整数键——生命周期所有权不等于拥有 box 中的全部记录。
+
+严格的 `kache:2:[sh]:<43 字符 token>:<43 字符 token>` 语法及旧版
+`k1:<namespace token>:<parts token>` 语法为 Kache 记录保留。共享 box 的应用不得创建
+匹配任一语法的宿主键。选择性 clear 需要枚举 box 键；如果宿主保存大量无关记录，仍应
+优先使用专用 box。
+
+## 所有权与 open 错误
 
 `open` 使用引用计数 box lease。由 Kache 打开的 box 在最后一个 lease 结束后关闭；外部
 已打开的 box 会被借用。`fromBox` 默认 `HiveCeBoxOwnership.borrowed`，只有 store
 负责关闭注入 box 时才选择 `owned`。如果 box 属于非全局 `HiveInterface`，应传入
 `fromBox(hive: ...)`，以便在正确 registry 上检查 adapter 注册和 box 身份。
+
+box 获取期间的所有失败——cipher 不匹配、策略不匹配、以及异步 Hive I/O 错误——都以
+`HiveCeOpenException` 上报。其 `toString` 固定脱敏，永不包含 box 名、路径或 cipher
+细节。请检查 `cause` 和 `stackTrace` 进行诊断。非法 `boxName` 参数在任何 Hive 交互前
+抛出 `ArgumentError`。
 
 如果 client 是唯一生命周期所有者，把 store 配置为 owned backend。两层 close 都是
 幂等的。

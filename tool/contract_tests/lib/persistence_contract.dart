@@ -189,6 +189,29 @@ void runPersistenceContract({
       );
     });
 
+    test('concurrent clear and write produces a valid final state', () async {
+      final harness = await _createHarness(createHarness);
+      final binding = harness.bind<String>(fingerprint: 'string-v1');
+      final key = KacheKey('concurrent-clear-write');
+
+      await _writeString(harness, key, binding, 'initial');
+
+      await Future.wait([
+        harness.backend.clear(),
+        _writeString(harness, key, binding, 'winner'),
+      ]);
+
+      final read = await harness.backend.read<String>(
+        key: key,
+        binding: binding,
+      );
+      // The final state must be valid: absent or the written value.
+      // A partial or corrupted record must never be observable.
+      if (read != null) {
+        expect(read.entry.data, 'winner');
+      }
+    });
+
     test('rejects a foreign binding while open', () async {
       final harness = await _createHarness(createHarness);
       final other = await _createHarness(createHarness);

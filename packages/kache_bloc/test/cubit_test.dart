@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bloc/bloc.dart';
 import 'package:kache_bloc/kache_bloc.dart';
 import 'package:test/test.dart';
 
@@ -89,6 +90,26 @@ void main() {
     expect((await cubit.rename('Grace')).requireData, 'Grace');
     expect(cubit.state.requireData, 'Grace');
   });
+  test('close remains idempotent during BlocObserver callbacks', () async {
+    final previousObserver = Bloc.observer;
+    final observer = _ReentrantCloseObserver();
+    Bloc.observer = observer;
+    addTearDown(() => Bloc.observer = previousObserver);
+    final client = KacheClient();
+    final cubit = KacheCubit<int>(
+      client: client,
+      query: KacheQuery<int>.memory(
+        key: KacheKey('bloc-close-reentrancy'),
+        policy: KachePolicy.cacheOnly(),
+      ),
+    );
+
+    final first = cubit.close();
+
+    expect(observer.reentrant, same(first));
+    await first;
+    await client.close();
+  });
 }
 
 final class _ProfileCubit extends KacheCubit<String> {
@@ -102,4 +123,18 @@ final class _ProfileCubit extends KacheCubit<String> {
         );
 
   Future<KacheSnapshot<String>> rename(String name) => setData(name);
+}
+
+final class _ReentrantCloseObserver extends BlocObserver {
+  Future<void>? reentrant;
+  bool _didReenter = false;
+
+  @override
+  void onClose(BlocBase<dynamic> bloc) {
+    super.onClose(bloc);
+    if (!_didReenter && bloc is KacheCubit<int>) {
+      _didReenter = true;
+      reentrant = bloc.close();
+    }
+  }
 }

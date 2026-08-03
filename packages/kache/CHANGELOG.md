@@ -1,3 +1,12 @@
+## 2.0.1
+
+- Prevented late persistence reads and freshness reclassification from
+  overwriting newer fetch state.
+- Made close continue independent cleanup after failures and return without
+  waiting on paused event listeners or stalled network cancellation callbacks.
+- Kept close idempotent during synchronous event callbacks and preserved the
+  first observed cleanup failure during error aggregation.
+
 ## 2.0.0
 
 - Replaced the legacy event enum with paired `kind`, `phase`, and `trigger`

@@ -1,3 +1,7 @@
+## 2.0.1
+
+- Made Cubit close idempotent during synchronous Bloc observer callbacks.
+
 ## 2.0.0
 
 - Added key-scoped `cancel()` to `KacheBlocBinding` and `KacheCubit`.

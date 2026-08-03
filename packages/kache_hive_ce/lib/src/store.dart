@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:hive_ce/hive_ce.dart';
 import 'package:kache/kache.dart';
 
@@ -9,6 +10,7 @@ import 'adapter_envelope.dart';
 import 'codec.dart';
 import 'envelope.dart';
 
+part 'key_strategy.dart';
 part 'binding.dart';
 part 'adapter.dart';
 part 'box_lease.dart';
@@ -23,6 +25,26 @@ enum HiveCeBoxOwnership {
   owned,
 }
 
+/// Reports a failure to open or lease a Hive CE box.
+///
+/// [toString] is intentionally sanitized: it never includes the box name, file
+/// path, cipher details, or key strategy. Inspect [cause] and [stackTrace]
+/// for programmatic diagnosis. This exception is separate from
+/// [KachePersistenceException] and is never thrown for
+/// [KachePersistenceOperation.close].
+final class HiveCeOpenException implements Exception {
+  HiveCeOpenException._(this.cause, this.stackTrace);
+
+  /// The original failure object.
+  final Object cause;
+
+  /// The original stack trace associated with [cause].
+  final StackTrace stackTrace;
+
+  @override
+  String toString() => 'HiveCeOpenException: failed to open a Hive CE box.';
+}
+
 /// A Hive CE persistence backend using versioned byte envelopes.
 final class HiveCeKacheStore implements KachePersistenceBackend {
   HiveCeKacheStore._({
@@ -30,13 +52,20 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     required this.hive,
     required this.boxOwnership,
     required Future<void> Function() releaseBox,
-  }) : _releaseBox = releaseBox;
+    required HiveCeKeyStrategy keyStrategy,
+  })  : _releaseBox = releaseBox,
+        _keyStrategy = keyStrategy;
 
   /// Wraps an already-open [box] with explicit lifecycle [ownership].
+  ///
+  /// Pass [keyStrategy] to control physical key derivation. Defaults to
+  /// [HiveCeKeyStrategy.sha256]. See [HiveCeKeyStrategy] for security
+  /// considerations.
   factory HiveCeKacheStore.fromBox(
     Box<Object?> box, {
     HiveCeBoxOwnership ownership = HiveCeBoxOwnership.borrowed,
     HiveInterface? hive,
+    HiveCeKeyStrategy keyStrategy = const HiveCeKeyStrategy.sha256(),
   }) {
     final targetHive = hive ?? Hive;
     _validateBoxOwner(targetHive, box);
@@ -46,6 +75,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       boxOwnership: ownership,
       releaseBox:
           ownership == HiveCeBoxOwnership.owned ? box.close : _completeVoid,
+      keyStrategy: keyStrategy,
     );
   }
 
@@ -54,19 +84,31 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   /// Stores opened through this factory share a reference-counted lease. A box
   /// opened by this factory closes after the final lease. A box that was
   /// already open outside Kache is borrowed and remains open.
+  ///
+  /// Pass [keyStrategy] to control physical key derivation. Defaults to
+  /// [HiveCeKeyStrategy.sha256]. Concurrent [open] calls sharing an active box
+  /// lease must pass a strategy with the same identity.
+  ///
+  /// All failures during box acquisition — cipher lease mismatches, strategy
+  /// lease mismatches, and asynchronous Hive I/O errors — are reported as
+  /// [HiveCeOpenException]. Invalid [boxName] arguments throw [ArgumentError]
+  /// before any Hive interaction.
   static Future<HiveCeKacheStore> open({
     required String boxName,
     HiveInterface? hive,
     HiveCipher? encryptionCipher,
+    HiveCeKeyStrategy keyStrategy = const HiveCeKeyStrategy.sha256(),
     bool crashRecovery = true,
     String? path,
     Uint8List? bytes,
   }) async {
+    _validateBoxName(boxName);
     final targetHive = hive ?? Hive;
     final lease = await _acquireHiveBox(
       hive: targetHive,
       boxName: boxName,
       encryptionCipher: encryptionCipher,
+      keyStrategyIdentity: keyStrategy._identity,
       crashRecovery: crashRecovery,
       path: path,
       bytes: bytes,
@@ -78,6 +120,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
           ? HiveCeBoxOwnership.owned
           : HiveCeBoxOwnership.borrowed,
       releaseBox: lease.release,
+      keyStrategy: keyStrategy,
     );
   }
 
@@ -94,6 +137,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   final Map<String, Type> _codecTypes = <String, Type>{};
   bool _isClosed = false;
   Future<void>? _closeFuture;
+  final HiveCeKeyStrategy _keyStrategy;
 
   /// Creates a typed binding owned by this exact store.
   HiveCeBinding<T> bind<T>({
@@ -121,6 +165,12 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   /// The adapter is not registered or owned by this store. Its type id must be
   /// registered on [hive] before this method is called.
   HiveCeAdapterBinding<T> bindAdapter<T>(TypeAdapter<dynamic> adapter) {
+    if (adapter is! TypeAdapter<T>) {
+      throw ArgumentError(
+        'The Hive CE TypeAdapter cannot encode the binding value type.',
+        'adapter',
+      );
+    }
     _validateAdapterTypeId(adapter.typeId);
     if (!hive.isAdapterRegistered(adapter.typeId)) {
       throw ArgumentError.value(
@@ -145,9 +195,12 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       binding,
       KachePersistenceOperation.read,
     );
-    late final Object? raw;
+    final physicalKey = _physicalKeyOf(key);
+    final legacyKey = _legacyKeyOf(key);
+
+    Object? raw;
     try {
-      raw = box.get(key.storageKey);
+      raw = box.get(physicalKey);
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
@@ -156,12 +209,32 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
         stackTrace: stackTrace,
       );
     }
+
+    String? sourceLegacyKey;
+    if (raw == null && legacyKey != null) {
+      try {
+        raw = box.get(legacyKey);
+      } on Object catch (error, stackTrace) {
+        _throwPersistence(
+          operation: KachePersistenceOperation.read,
+          stage: KachePersistenceStage.backend,
+          cause: error,
+          stackTrace: stackTrace,
+        );
+      }
+      if (raw != null) {
+        sourceLegacyKey = legacyKey;
+      }
+    }
+
     if (raw == null) {
       return null;
     }
+
     if (hiveBinding is HiveCeAdapterBinding<T>) {
       return _readAdapter<T>(
-        key: key,
+        physicalKey: physicalKey,
+        legacyKey: sourceLegacyKey,
         binding: hiveBinding,
         raw: raw,
       );
@@ -202,12 +275,19 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
         isInvalidated: envelope.isInvalidated,
       ),
     );
-    if (envelope.schema == byteBinding.schema) {
+    final needsSchemaMigration = envelope.schema != byteBinding.schema;
+    if (!needsSchemaMigration && sourceLegacyKey == null) {
       return KachePersistenceRead<T>(entry: entry);
     }
     return KachePersistenceRead<T>(
       entry: entry,
-      maintenance: () => _rewriteMigrated(key, byteBinding, entry, rawBytes),
+      maintenance: () => _rewriteMigrated<T>(
+        byteBinding,
+        entry,
+        rawBytes,
+        physicalKey: physicalKey,
+        legacyKey: sourceLegacyKey,
+      ),
     );
   }
 
@@ -222,17 +302,21 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       binding,
       KachePersistenceOperation.write,
     );
+    final physicalKey = _physicalKeyOf(key);
+    final legacyKey = _legacyKeyOf(key);
     if (hiveBinding is HiveCeAdapterBinding<T>) {
-      _ensureExistingAdapterCompatible(key, hiveBinding.typeId);
+      _ensureExistingAdapterCompatible(
+          physicalKey, legacyKey, hiveBinding.typeId);
       await _writeAdapter<T>(
-        key: key,
+        physicalKey: physicalKey,
+        legacyKey: legacyKey,
         binding: hiveBinding,
         entry: entry,
       );
       return;
     }
     final byteBinding = hiveBinding as HiveCeBinding<T>;
-    _ensureExistingCodecCompatible(key, byteBinding.codecId);
+    _ensureExistingCodecCompatible(physicalKey, legacyKey, byteBinding.codecId);
     late final Uint8List payload;
     try {
       payload = Uint8List.fromList(byteBinding.codec.encode(entry.data));
@@ -252,7 +336,10 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       payload: payload,
     );
     try {
-      await box.put(key.storageKey, record);
+      await box.put(physicalKey, record);
+      if (legacyKey != null) {
+        await box.delete(legacyKey);
+      }
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.write,
@@ -266,20 +353,29 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   @override
   Future<void> delete({required KacheKey key}) async {
     _ensureOpen(KachePersistenceOperation.delete);
+    final physicalKey = _physicalKeyOf(key);
+    final legacyKey = _legacyKeyOf(key);
+    final keys = legacyKey == null
+        ? <String>[physicalKey]
+        : <String>[physicalKey, legacyKey];
     await _runBackend(
       KachePersistenceOperation.delete,
-      () => box.delete(key.storageKey),
+      () => box.deleteAll(keys),
     );
   }
 
   @override
   Future<void> clearNamespace({required KacheNamespace namespace}) async {
     _ensureOpen(KachePersistenceOperation.clearNamespace);
+    final newPrefix = _physicalNamespacePrefix(namespace);
+    final legacyPrefix = namespace.storagePrefix;
     late final List<String> keys;
     try {
       keys = box.keys
           .whereType<String>()
-          .where((key) => key.startsWith(namespace.storagePrefix))
+          .where(
+            (key) => _isManagedNamespaceKey(key, newPrefix, legacyPrefix),
+          )
           .toList(growable: false);
     } on Object catch (error, stackTrace) {
       _throwPersistence(
@@ -298,9 +394,24 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   @override
   Future<void> clear() async {
     _ensureOpen(KachePersistenceOperation.clear);
-    await _runBackend(KachePersistenceOperation.clear, () async {
-      await box.clear();
-    });
+    late final List<String> keys;
+    try {
+      keys = box.keys
+          .whereType<String>()
+          .where(_isManagedKey)
+          .toList(growable: false);
+    } on Object catch (error, stackTrace) {
+      _throwPersistence(
+        operation: KachePersistenceOperation.clear,
+        stage: KachePersistenceStage.backend,
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    }
+    await _runBackend(
+      KachePersistenceOperation.clear,
+      () => box.deleteAll(keys),
+    );
   }
 
   @override

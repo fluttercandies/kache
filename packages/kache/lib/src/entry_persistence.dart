@@ -6,6 +6,7 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
     _KacheTrace trace,
   ) async {
     final version = _captureVersion();
+    final dataRevision = _dataRevision;
     _didReadPersistence = true;
     final span = trace.span(
       KacheEventKind.read,
@@ -49,6 +50,13 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
           );
           return;
         }
+        if (_dataRevision != dataRevision) {
+          span.cancel(
+            KacheCancelReason.dataSet,
+            revision: _snapshot.revision,
+          );
+          return;
+        }
         final failure = _toPersistenceFailure(
           kind: KacheFailureKind.persistenceRead,
           error: error,
@@ -68,6 +76,13 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
         if (client.isClosed || !_isCurrent(version)) {
           span.cancel(
             version.cancellation.reason ?? KacheCancelReason.close,
+            revision: _snapshot.revision,
+          );
+          return;
+        }
+        if (_dataRevision != dataRevision) {
+          span.cancel(
+            KacheCancelReason.dataSet,
             revision: _snapshot.revision,
           );
           return;
@@ -99,6 +114,7 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
     );
     if (freshness == null) {
       _emitEmpty(const KachePersistenceState.writing());
+      _dataRevision += 1;
       span.succeed(revision: _snapshot.revision);
       trace
           .span(
@@ -120,8 +136,10 @@ extension _KacheEntryPersistenceExtensions<T> on _KacheEntry<T> {
       freshness: freshness,
       source: KacheDataSource.persistence,
       fetchedAt: metadata.fetchedAt,
+      failure: _snapshot.failure,
       persistence: const KachePersistenceState.persisted(),
     );
+    _dataRevision += 1;
     span.succeed(revision: _snapshot.revision, data: read.entry.data);
     trace
         .span(

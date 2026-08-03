@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bloc/bloc.dart';
 import 'package:kache/kache.dart';
 
@@ -80,8 +82,17 @@ class KacheCubit<T> extends Cubit<KacheSnapshot<T>> {
       return existing;
     }
     _isClosing = true;
-    final future = _waitForClose(binding.close(), super.close());
+    final completion = Completer<void>();
+    final future = completion.future;
     _closeFuture = future;
+    unawaited(
+      _waitForClose(binding.close(), super.close()).then<void>(
+        (_) => completion.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completion.completeError(error, stackTrace);
+        },
+      ),
+    );
     return future;
   }
 

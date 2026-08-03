@@ -25,7 +25,7 @@ abstract class _KacheEntryBase {
 
   Future<void> drainForClose();
 
-  Future<void> finishClose();
+  Future<void> finishClose({required bool waitForBackendRead});
 }
 
 sealed class _KacheFetchOutcome<T> {
@@ -129,6 +129,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   int _generation = 0;
   KacheCancellationController _generationCancellation =
       KacheCancellationController();
+  int _dataRevision = 0;
 
   KacheSnapshot<T> get snapshot => _snapshot;
 
@@ -163,6 +164,12 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     }
     if (_references == 0) {
       _gcTask?.cancel();
+      if (storageMode == KacheStorageMode.none) {
+        _gcTask = null;
+        _gcDue = true;
+        client._tryCollect(this);
+        return;
+      }
       _gcTask = client._scheduler(_maximumGcAfter, () {
         _gcTask = null;
         _gcDue = true;
@@ -313,6 +320,10 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     if (_didReadPersistence) {
       return false;
     }
+    if (_snapshot.hasData) {
+      _didReadPersistence = true;
+      return false;
+    }
     late final Future<void> tracked;
     tracked = _readPersistence(query, trace).whenComplete(() {
       if (identical(_readFuture, tracked)) {
@@ -341,6 +352,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
       if (storageMode == KacheStorageMode.persisted) {
         final version = _captureVersion();
         _emitEmpty(const KachePersistenceState.writing());
+        _dataRevision += 1;
         trace
             .span(
               KacheEventKind.lookup,
@@ -354,6 +366,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         await _deletePersisted(version, trace: trace, query: query);
       } else {
         _emitEmpty(null);
+        _dataRevision += 1;
         trace
             .span(
               KacheEventKind.lookup,
@@ -374,6 +387,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
         freshness: freshness,
         source: _snapshot.source!,
         fetchedAt: _snapshot.fetchedAt!,
+        isRefreshing: _snapshot.isRefreshing,
         failure: _snapshot.failure,
         persistence: _snapshot.persistence,
       );
@@ -493,6 +507,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
           fetchedAt: fetchedAt,
           persistence: persistence,
         );
+        _dataRevision += 1;
         span.succeed(revision: _snapshot.revision, data: data);
         if (storageMode == KacheStorageMode.persisted) {
           await _writePersisted(
@@ -584,6 +599,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
           ? const KachePersistenceState.writing()
           : null,
     );
+    _dataRevision += 1;
   }
 
   @override
@@ -632,7 +648,7 @@ final class _KacheEntry<T> implements _KacheEntryBase {
   }
 
   @override
-  Future<void> finishClose() async {
+  Future<void> finishClose({required bool waitForBackendRead}) async {
     if (_isClosed) {
       return;
     }
@@ -643,9 +659,11 @@ final class _KacheEntry<T> implements _KacheEntryBase {
     if (read != null) {
       await read;
     }
-    final backendRead = _readBackendFuture;
-    if (backendRead != null) {
-      await backendRead;
+    if (waitForBackendRead) {
+      final backendRead = _readBackendFuture;
+      if (backendRead != null) {
+        await backendRead;
+      }
     }
     await _changes.close();
   }

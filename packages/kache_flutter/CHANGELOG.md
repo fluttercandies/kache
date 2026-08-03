@@ -1,3 +1,8 @@
+## 2.0.1
+
+- Made different-key query and client replacements transactional, preserving
+  the active controller when replacement validation fails.
+
 ## 2.0.0
 
 - Added `KacheController.cancel()` for the current key's shared fetch.

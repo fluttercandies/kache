@@ -42,9 +42,20 @@ final class KacheController<T> extends ChangeNotifier
       _query = query;
       return;
     }
-    _unbind();
+
+    final generation = _bindingGeneration + 1;
+    final replacement = _createBinding(query, generation);
+    final previousResource = _resource;
+    final previousSubscription = _subscription;
+    _bindingGeneration = generation;
+    _resource = replacement.resource;
+    _value = replacement.resource.snapshot;
+    _subscription = replacement.subscription;
     _query = query;
-    _bind(query);
+    if (previousSubscription != null) {
+      unawaited(previousSubscription.cancel());
+    }
+    previousResource.dispose();
     notifyListeners();
   }
 
@@ -104,14 +115,29 @@ final class KacheController<T> extends ChangeNotifier
 
   void _bind(KacheQuery<T> query) {
     final generation = ++_bindingGeneration;
-    _resource = client.watch(query);
-    _value = _resource.snapshot;
-    _subscription = _resource.stream.listen((snapshot) {
-      if (_isDisposed || generation != _bindingGeneration) {
-        return;
-      }
-      _accept(snapshot);
-    });
+    final binding = _createBinding(query, generation);
+    _resource = binding.resource;
+    _value = binding.resource.snapshot;
+    _subscription = binding.subscription;
+  }
+
+  ({
+    KacheResource<T> resource,
+    StreamSubscription<KacheSnapshot<T>> subscription,
+  }) _createBinding(KacheQuery<T> query, int generation) {
+    final resource = client.watch(query);
+    try {
+      final subscription = resource.stream.listen((snapshot) {
+        if (_isDisposed || generation != _bindingGeneration) {
+          return;
+        }
+        _accept(snapshot);
+      });
+      return (resource: resource, subscription: subscription);
+    } on Object {
+      resource.dispose();
+      rethrow;
+    }
   }
 
   void _unbind() {

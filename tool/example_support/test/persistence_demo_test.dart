@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
@@ -29,6 +31,23 @@ void main() {
 
     // encrypted store is a real HiveCeKacheStore.
     expect(demo.encryptedStore, isA<HiveCeKacheStore>());
+    final encryptedKey = KacheKey('encrypted-profile', <Object?>['account']);
+    final encryptedBinding = demo.encryptedStore.bind<String>(
+      codecId: 'test-string',
+      schema: 1,
+      codec: HiveCeCodec<String>(encode: utf8.encode, decode: utf8.decode),
+    );
+    await demo.encryptedStore.write<String>(
+      key: encryptedKey,
+      binding: encryptedBinding,
+      entry: KachePersistedEntry<String>(
+        data: 'encrypted-value',
+        metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+      ),
+    );
+    final physicalKey = demo.encryptedStore.box.keys.single as String;
+    expect(physicalKey, startsWith('kache:2:h:'));
+    expect(physicalKey, isNot(encryptedKey.storageKey));
 
     // MemoryKachePersistence backs a real client + query.
     expect(demo.memoryBackend, isA<MemoryKachePersistence>());
@@ -42,6 +61,44 @@ void main() {
     await demo.close();
     expect(demo.isClosed, isTrue);
     expect(demo.memoryClient.isClosed, isTrue);
+    expect(demo.borrowedBox.isOpen, isFalse);
+    expect(demo.encryptedStore.box.isOpen, isFalse);
+    await expectLater(
+      demo.memoryBackend.read<RepositoryProfile>(
+        key: demo.memoryQuery.key,
+        binding: demo.memoryQuery.binding!,
+      ),
+      throwsA(isA<KachePersistenceException>()),
+    );
+    await expectLater(
+      demo.borrowedStore.read<RepositoryProfile>(
+        key: KacheKey('closed-borrowed'),
+        binding: demo.migratorBinding,
+      ),
+      throwsA(isA<KachePersistenceException>()),
+    );
+    await demo.close();
+  });
+
+  test('PersistenceDemo close is idempotent during client events', () async {
+    final demo = await PersistenceDemo.open(
+      gateway: _FakeGateway(),
+      boxPrefix: 'persistence_demo_reentrant_close',
+    );
+    Future<void>? reentrant;
+    final subscription = demo.memoryClient.events.listen((event) {
+      if (reentrant == null &&
+          event.kind == KacheEventKind.close &&
+          event.phase == KacheEventPhase.started) {
+        reentrant = demo.close();
+      }
+    });
+
+    final first = demo.close();
+
+    expect(reentrant, same(first));
+    await first;
+    await subscription.cancel();
   });
 
   test(
@@ -63,6 +120,58 @@ void main() {
         binding: demo.memoryQuery.binding!,
       );
       expect(read?.entry.data.fullName, 'flutter/flutter');
+    },
+  );
+
+  test(
+    'PersistenceDemo cleans acquired resources when construction fails',
+    () async {
+      const prefix = 'persistence_demo_open_failure';
+      final conflictingBox = await Hive.openBox<int>('${prefix}_encrypted');
+      addTearDown(conflictingBox.close);
+
+      await expectLater(
+        PersistenceDemo.open(gateway: _FakeGateway(), boxPrefix: prefix),
+        throwsA(isA<HiveCeOpenException>()),
+      );
+
+      expect(Hive.isBoxOpen('${prefix}_borrowed'), isFalse);
+      expect(conflictingBox.isOpen, isTrue);
+    },
+  );
+
+  test(
+    'persistence JSON failures never retain untrusted payload sources',
+    () async {
+      const marker = 'private-persisted-marker';
+      for (final payload in <Uint8List>[
+        Uint8List.fromList(utf8.encode('{"token":"$marker",')),
+        Uint8List.fromList(const <int>[0xff, 0xfe, 0xfd]),
+      ]) {
+        try {
+          repositoryProfileCodec.decode(payload);
+          fail('Expected malformed persistence payload to fail.');
+        } on FormatException catch (error) {
+          expect(error.source, isNull);
+          expect(error.toString(), isNot(contains(marker)));
+        }
+      }
+
+      final demo = await PersistenceDemo.open(
+        gateway: _FakeGateway(),
+        boxPrefix: 'persistence_demo_legacy_sanitization',
+      );
+      addTearDown(demo.close);
+      try {
+        demo.migratorBinding.migrate!(
+          Uint8List.fromList(utf8.encode('{"token":"$marker",')),
+          0,
+        );
+        fail('Expected malformed legacy payload to fail.');
+      } on FormatException catch (error) {
+        expect(error.source, isNull);
+        expect(error.toString(), isNot(contains(marker)));
+      }
     },
   );
 }

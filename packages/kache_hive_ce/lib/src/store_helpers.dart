@@ -67,16 +67,25 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
   }
 
   Future<void> _rewriteMigrated<T>(
-    KacheKey key,
     HiveCeBinding<T> binding,
     KachePersistedEntry<T> entry,
-    Uint8List expectedRecord,
-  ) async {
+    Uint8List expectedRecord, {
+    required String physicalKey,
+    required String? legacyKey,
+  }) async {
     try {
       _ensureOpen(KachePersistenceOperation.read);
-      final current = box.get(key.storageKey);
+      final sourceKey = legacyKey ?? physicalKey;
+      final current = box.get(sourceKey);
       if (current is! Uint8List || !_bytesEqual(current, expectedRecord)) {
         return;
+      }
+      if (legacyKey != null) {
+        final existingPhysical = box.get(physicalKey);
+        if (existingPhysical != null) {
+          await box.delete(legacyKey);
+          return;
+        }
       }
       final payload = Uint8List.fromList(binding.codec.encode(entry.data));
       final record = HiveCeEnvelope.encode(
@@ -86,7 +95,19 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
         codecId: binding.codecId,
         payload: payload,
       );
-      await box.put(key.storageKey, record);
+      final latestSource = box.get(sourceKey);
+      if (latestSource is! Uint8List ||
+          !_bytesEqual(latestSource, expectedRecord)) {
+        return;
+      }
+      if (legacyKey != null && box.get(physicalKey) != null) {
+        await box.delete(legacyKey);
+        return;
+      }
+      await box.put(physicalKey, record);
+      if (legacyKey != null) {
+        await box.delete(legacyKey);
+      }
     } on KachePersistenceException catch (error) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
@@ -104,18 +125,54 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
     }
   }
 
-  void _ensureExistingCodecCompatible(KacheKey key, String codecId) {
-    late final Object? raw;
+  Future<void> _rewriteAdapterKey({
+    required String physicalKey,
+    required String legacyKey,
+    required Object expectedRaw,
+  }) async {
     try {
-      raw = box.get(key.storageKey);
+      _ensureOpen(KachePersistenceOperation.read);
+      final current = box.get(legacyKey);
+      if (current == null || !identical(current, expectedRaw)) {
+        return;
+      }
+      final existingPhysical = box.get(physicalKey);
+      if (existingPhysical != null) {
+        await box.delete(legacyKey);
+        return;
+      }
+      await box.put(physicalKey, expectedRaw);
+      await box.delete(legacyKey);
+    } on KachePersistenceException catch (error) {
+      _throwPersistence(
+        operation: KachePersistenceOperation.read,
+        stage: KachePersistenceStage.migration,
+        cause: error.cause,
+        stackTrace: error.stackTrace,
+      );
     } on Object catch (error, stackTrace) {
       _throwPersistence(
-        operation: KachePersistenceOperation.write,
-        stage: KachePersistenceStage.backend,
+        operation: KachePersistenceOperation.read,
+        stage: KachePersistenceStage.migration,
         cause: error,
         stackTrace: stackTrace,
       );
     }
+  }
+
+  void _ensureExistingCodecCompatible(
+    String physicalKey,
+    String? legacyKey,
+    String codecId,
+  ) {
+    _checkCodecAtKey(physicalKey, codecId);
+    if (legacyKey != null) {
+      _checkCodecAtKey(legacyKey, codecId);
+    }
+  }
+
+  void _checkCodecAtKey(String key, String codecId) {
+    final raw = _safeGet(key, KachePersistenceOperation.write);
     if (raw == null) {
       return;
     }
@@ -132,6 +189,32 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
     } on Object {
       _throwCompatibility(KachePersistenceOperation.write);
     }
+  }
+
+  Object? _safeGet(String key, KachePersistenceOperation operation) {
+    try {
+      return box.get(key);
+    } on Object catch (error, stackTrace) {
+      _throwPersistence(
+        operation: operation,
+        stage: KachePersistenceStage.backend,
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  String _physicalKeyOf(KacheKey key) => _keyStrategy._formatKey(key);
+
+  String _physicalNamespacePrefix(KacheNamespace namespace) =>
+      _keyStrategy._formatNamespacePrefix(namespace);
+
+  String? _legacyKeyOf(KacheKey key) {
+    final canonical = key.storageKey;
+    if (canonical.length <= 255) {
+      return canonical;
+    }
+    return null;
   }
 
   Future<void> _runBackend(

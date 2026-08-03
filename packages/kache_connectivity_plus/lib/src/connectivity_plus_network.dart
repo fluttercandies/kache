@@ -17,7 +17,7 @@ final class ConnectivityPlusNetwork implements KacheNetwork {
 
   final Connectivity _connectivity;
   final StreamController<_StateRevision> _updates =
-      StreamController<_StateRevision>.broadcast(sync: true);
+      StreamController<_StateRevision>.broadcast();
 
   StreamSubscription<List<ConnectivityResult>>? _sourceSubscription;
   Future<void>? _closeFuture;
@@ -149,15 +149,30 @@ final class ConnectivityPlusNetwork implements KacheNetwork {
     _closed = true;
     Object? cancellationError;
     StackTrace? cancellationStackTrace;
+    var cancellationSettled = false;
     try {
-      await _sourceSubscription?.cancel();
+      final cancellation = _sourceSubscription?.cancel();
+      if (cancellation != null) {
+        unawaited(
+          cancellation.then<void>(
+            (_) => cancellationSettled = true,
+            onError: (Object error, StackTrace stackTrace) {
+              cancellationError = error;
+              cancellationStackTrace = stackTrace;
+              cancellationSettled = true;
+            },
+          ),
+        );
+      }
     } on Object catch (error, stackTrace) {
       cancellationError = error;
       cancellationStackTrace = stackTrace;
-    } finally {
-      await _closeUpdates();
+      cancellationSettled = true;
     }
-    if (cancellationError case final error?) {
+    unawaited(_closeUpdates());
+    await Future<void>.value();
+    final error = cancellationError;
+    if (cancellationSettled && error != null) {
       Error.throwWithStackTrace(error, cancellationStackTrace!);
     }
   }

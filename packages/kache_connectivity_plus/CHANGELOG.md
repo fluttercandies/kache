@@ -1,3 +1,8 @@
+## 2.0.1
+
+- Made close independent of paused or reentrant state subscribers and stalled
+  platform cancellation while retaining immediately reported errors.
+
 ## 2.0.0
 
 - Verified connectivity_plus 7.3.1 while retaining the compatible 7.3.0 floor.

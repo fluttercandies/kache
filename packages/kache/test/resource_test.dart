@@ -250,4 +250,32 @@ void main() {
     never.dispose();
     await client.close();
   });
+  test('snapshot listeners can issue synchronous follow-up commands', () async {
+    final client = KacheClient(clock: () => now);
+    final resource = client.watch(
+      KacheQuery<int>.memory(
+        key: KacheKey('snapshot-reentrancy'),
+        policy: KachePolicy.cacheOnly(),
+      ),
+    );
+    final followUp = Completer<KacheSnapshot<int>>();
+    var didFollowUp = false;
+    final subscription = resource.stream.listen((snapshot) {
+      if (!didFollowUp && snapshot.hasData && snapshot.requireData == 1) {
+        didFollowUp = true;
+        resource.setData(2).then(
+              followUp.complete,
+              onError: followUp.completeError,
+            );
+      }
+    });
+
+    await resource.setData(1);
+
+    expect((await followUp.future).requireData, 2);
+    expect(resource.snapshot.requireData, 2);
+    await subscription.cancel();
+    resource.dispose();
+    await client.close();
+  });
 }

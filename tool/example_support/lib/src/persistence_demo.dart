@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -38,70 +39,94 @@ final class PersistenceDemo {
     required RepositoryGateway gateway,
     required String boxPrefix,
   }) async {
-    // 1) HiveCeKacheStore.fromBox + HiveCeBoxOwnership.borrowed.
-    //    The caller opens the raw Hive box; Kache wraps it but does NOT close
-    //    it (borrowed). This is the pattern for sharing a box across clients.
-    final borrowedBoxName = '${boxPrefix}_borrowed';
-    final borrowedBox = await Hive.openBox<Object?>(
-      borrowedBoxName,
-      crashRecovery: true,
-    );
-    final borrowedStore = HiveCeKacheStore.fromBox(
-      borrowedBox,
-      ownership: HiveCeBoxOwnership.borrowed,
-    );
+    Box<Object?>? borrowedBox;
+    HiveCeKacheStore? borrowedStore;
+    HiveCeKacheStore? encryptedStore;
+    MemoryKachePersistence? memoryBackend;
+    KacheClient? memoryClient;
+    try {
+      // 1) HiveCeKacheStore.fromBox + HiveCeBoxOwnership.borrowed.
+      //    The caller opens the raw Hive box; Kache wraps it but does NOT close
+      //    it (borrowed). This is the pattern for sharing a box across clients.
+      final borrowedBoxName = '${boxPrefix}_borrowed';
+      borrowedBox = await Hive.openBox<Object?>(
+        borrowedBoxName,
+        crashRecovery: true,
+      );
+      borrowedStore = HiveCeKacheStore.fromBox(
+        borrowedBox,
+        ownership: HiveCeBoxOwnership.borrowed,
+      );
 
-    // 2) bind() with a HiveCeMigrator that upgrades a legacy schema-0 payload.
-    //    The migrator runs automatically when an older record is read.
-    final migratorBinding = borrowedStore.bind<RepositoryProfile>(
-      codecId: 'github-repository-profile-json',
-      schema: 1,
-      codec: repositoryProfileCodec,
-      migrate: _migrateFromLegacy,
-    );
+      // 2) bind() with a HiveCeMigrator that upgrades a legacy schema-0 payload.
+      //    The migrator runs automatically when an older record is read.
+      final migratorBinding = borrowedStore.bind<RepositoryProfile>(
+        codecId: 'github-repository-profile-json',
+        schema: 1,
+        codec: repositoryProfileCodec,
+        migrate: _migrateFromLegacy,
+      );
 
-    // 3) An encrypted box opened with a HiveCipher. Kache never holds or logs
-    //    the key; the cipher is owned by the caller.
-    final cipher = HiveAesCipher(_demoEncryptionKey);
-    final encryptedStore = await HiveCeKacheStore.open(
-      boxName: '${boxPrefix}_encrypted',
-      encryptionCipher: cipher,
-    );
+      // 3) An encrypted box opened with a caller-owned HiveCipher. HMAC key
+      //    derivation also hides low-entropy logical keys from the box file.
+      final cipher = HiveAesCipher(_demoEncryptionKey);
+      encryptedStore = await HiveCeKacheStore.open(
+        boxName: '${boxPrefix}_encrypted',
+        encryptionCipher: cipher,
+        keyStrategy: HiveCeKeyStrategy.hmacSha256(_demoPhysicalKeySecret),
+      );
 
-    // 4) MemoryKachePersistence: a custom KachePersistenceBackend implemented
-    //    entirely in the core SDK (no Hive, no Flutter). Useful for tests and
-    //    for callers who want process-local typed persistence without a binary
-    //    format. We back a real client with it so the demo query round-trips.
-    final memoryBackend = MemoryKachePersistence();
-    final memoryBinding = memoryBackend.bind<RepositoryProfile>(
-      fingerprint: 'example-memory:v1',
-    );
-    final memoryClient = KacheClient(
-      persistence: memoryBackend,
-      persistenceOwnership: KachePersistenceOwnership.owned,
-    );
-    final memoryQuery = KacheQuery<RepositoryProfile>.persisted(
-      key: KacheKey('persistence-demo-memory', <Object?>['borrowed-box']),
-      binding: memoryBinding,
-      fetch: gateway.fetch,
-      policy: KachePolicy.cacheFirst(
-        freshFor: const Duration(minutes: 5),
-        expireAfter: const Duration(days: 1),
-      ),
-      debugName: 'persistence-demo memory backend',
-    );
-    final memorySnapshot = await memoryClient.prefetch(memoryQuery);
+      // 4) MemoryKachePersistence: a custom KachePersistenceBackend implemented
+      //    entirely in the core SDK (no Hive, no Flutter). Useful for tests and
+      //    for callers who want process-local typed persistence without a binary
+      //    format. We back a real client with it so the demo query round-trips.
+      memoryBackend = MemoryKachePersistence();
+      final memoryBinding = memoryBackend.bind<RepositoryProfile>(
+        fingerprint: 'example-memory:v1',
+      );
+      memoryClient = KacheClient(
+        persistence: memoryBackend,
+        persistenceOwnership: KachePersistenceOwnership.owned,
+      );
+      final memoryQuery = KacheQuery<RepositoryProfile>.persisted(
+        key: KacheKey('persistence-demo-memory', <Object?>['borrowed-box']),
+        binding: memoryBinding,
+        fetch: gateway.fetch,
+        policy: KachePolicy.cacheFirst(
+          freshFor: const Duration(minutes: 5),
+          expireAfter: const Duration(days: 1),
+        ),
+        debugName: 'persistence-demo memory backend',
+      );
+      final memorySnapshot = await memoryClient.prefetch(memoryQuery);
 
-    return PersistenceDemo._(
-      borrowedStore: borrowedStore,
-      borrowedBox: borrowedBox,
-      migratorBinding: migratorBinding,
-      encryptedStore: encryptedStore,
-      memoryBackend: memoryBackend,
-      memoryClient: memoryClient,
-      memoryQuery: memoryQuery,
-      memorySnapshot: memorySnapshot,
-    );
+      return PersistenceDemo._(
+        borrowedStore: borrowedStore,
+        borrowedBox: borrowedBox,
+        migratorBinding: migratorBinding,
+        encryptedStore: encryptedStore,
+        memoryBackend: memoryBackend,
+        memoryClient: memoryClient,
+        memoryQuery: memoryQuery,
+        memorySnapshot: memorySnapshot,
+      );
+    } on Object catch (error, stackTrace) {
+      try {
+        await _closePersistenceResources(<Future<void> Function()>[
+          if (memoryClient != null)
+            memoryClient.close
+          else if (memoryBackend != null)
+            memoryBackend.close,
+          if (encryptedStore != null) encryptedStore.close,
+          if (borrowedStore != null) borrowedStore.close,
+          if (borrowedBox != null) borrowedBox.close,
+        ]);
+      } on Object {
+        // The construction failure is the first lifecycle failure and retains
+        // precedence after every acquired resource has been offered cleanup.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   /// Store built from [HiveCeKacheStore.fromBox] with borrowed ownership.
@@ -129,40 +154,51 @@ final class PersistenceDemo {
   final KacheSnapshot<RepositoryProfile> memorySnapshot;
 
   /// Closes every backend owned by this demo exactly once.
-  Future<void> close() => _performClose();
-
-  Future<void>? _closeFuture;
-  bool _closed = false;
-
-  Future<void> _performClose() {
+  Future<void> close() {
     final existing = _closeFuture;
     if (existing != null) {
       return existing;
     }
     _closed = true;
-    final future = _doClose();
+    final completion = Completer<void>();
+    final future = completion.future;
     _closeFuture = future;
+    unawaited(
+      _doClose().then<void>(
+        (_) => completion.complete(),
+        onError: (Object error, StackTrace stackTrace) {
+          completion.completeError(error, stackTrace);
+        },
+      ),
+    );
     return future;
   }
 
-  Future<void> _doClose() async {
-    // Close the memory-backed client (owns its backend).
-    await memoryClient.close();
-    // Close the encrypted store (opened by Kache → owned lease).
-    await encryptedStore.close();
-    // Borrowed store must NOT close the box; we own the raw box here, so close
-    // it after the borrowed store is done.
-    await borrowedBox.close();
-  }
+  Future<void>? _closeFuture;
+  bool _closed = false;
+
+  Future<void> _doClose() =>
+      _closePersistenceResources(<Future<void> Function()>[
+        // The client owns and closes the memory backend.
+        memoryClient.close,
+        // The Kache-managed encrypted store owns its box lease.
+        encryptedStore.close,
+        // End the borrowed store lifecycle before its owner closes the raw box.
+        borrowedStore.close,
+        borrowedBox.close,
+      ]);
 
   /// Whether [close] has run.
   bool get isClosed => _closed;
 }
 
-/// A fixed demo encryption key. In a real app the caller owns the key; Kache
-/// never records it. Derived deterministically so the encrypted box is stable
-/// across restarts within this demo.
+/// Fixed, separate demonstration keys. A production app must load independent,
+/// cryptographically random encryption and HMAC secrets from secure storage;
+/// Kache never records either secret.
 final List<int> _demoEncryptionKey = _deriveDemoKey('kache-example-encryption');
+final List<int> _demoPhysicalKeySecret = _deriveDemoKey(
+  'kache-example-physical-key',
+);
 
 List<int> _deriveDemoKey(String seed) {
   final bytes = utf8.encode(seed);
@@ -173,18 +209,38 @@ List<int> _deriveDemoKey(String seed) {
   return key.toList();
 }
 
+Future<void> _closePersistenceResources(
+  List<Future<void> Function()> close,
+) async {
+  Object? firstError;
+  StackTrace? firstStackTrace;
+  for (final operation in close) {
+    try {
+      await operation();
+    } on Object catch (error, stackTrace) {
+      firstError ??= error;
+      firstStackTrace ??= stackTrace;
+    }
+  }
+  final error = firstError;
+  if (error != null) {
+    Error.throwWithStackTrace(error, firstStackTrace!);
+  }
+}
+
 /// Migrates a legacy schema-0 payload (snake_case GitHub JSON) into the current
 /// [repositoryProfileCodec] shape. This is the callback passed to `bind()`.
 RepositoryProfile _migrateFromLegacy(Uint8List payload, int fromSchema) {
-  // schema 0 stored raw GitHub JSON (snake_case); the current codec stores the
-  // camelCase persisted shape. We parse the legacy payload via the GitHub
-  // parser and re-encode so subsequent reads use the current schema.
-  if (fromSchema == 0) {
-    final decoded = jsonDecode(utf8.decode(payload));
-    if (decoded is Map<String, Object?>) {
-      return RepositoryProfile.fromGitHubJson(decoded);
-    }
+  if (fromSchema != 0) {
+    return repositoryProfileCodec.decode(payload);
   }
-  // Fallback: attempt current-schema decode.
-  return repositoryProfileCodec.decode(payload);
+  try {
+    final decoded = jsonDecode(utf8.decode(payload));
+    if (decoded is! Map<String, Object?>) {
+      throw const FormatException('Legacy repository must be an object.');
+    }
+    return RepositoryProfile.fromGitHubJson(decoded);
+  } on FormatException {
+    throw const FormatException('Legacy repository payload is invalid.');
+  }
 }

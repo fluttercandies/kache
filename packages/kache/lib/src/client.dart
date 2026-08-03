@@ -300,10 +300,23 @@ final class KacheClient {
       return existing;
     }
     _isClosed = true;
-    final trace = _trace(KacheEventTrigger.close);
-    final span = trace.span(KacheEventKind.close)..start();
-    final future = _performClose(drainWrites: drainWrites, span: span);
+    final completion = Completer<void>();
+    final future = completion.future;
     _closeFuture = future;
+    try {
+      final trace = _trace(KacheEventTrigger.close);
+      final span = trace.span(KacheEventKind.close)..start();
+      unawaited(
+        _performClose(drainWrites: drainWrites, span: span).then<void>(
+          (_) => completion.complete(),
+          onError: (Object error, StackTrace stackTrace) {
+            completion.completeError(error, stackTrace);
+          },
+        ),
+      );
+    } on Object catch (error, stackTrace) {
+      completion.completeError(error, stackTrace);
+    }
     return future;
   }
 
@@ -543,7 +556,7 @@ final class KacheClient {
       return;
     }
     _entries.remove(entry.key.storageKey);
-    unawaited(entry.finishClose());
+    unawaited(entry.finishClose(waitForBackendRead: false));
   }
 
   Future<KacheClearResult> _performClear({
@@ -658,10 +671,45 @@ final class KacheClient {
     required bool drainWrites,
     required _KacheEventSpan span,
   }) async {
+    _KacheCloseFailure? firstFailure;
+    void recordFailure(Object error, StackTrace stackTrace) {
+      firstFailure ??= _KacheCloseFailure(
+        failure: KacheFailure(
+          kind: KacheFailureKind.lifecycle,
+          cause: error,
+          stackTrace: stackTrace,
+        ),
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    Object? networkCancellationError;
+    StackTrace? networkCancellationStackTrace;
+    var networkCancellationSettled = false;
+
     try {
       final networkSubscription = _networkSubscription;
       _networkSubscription = null;
-      await networkSubscription?.cancel();
+      if (networkSubscription != null) {
+        try {
+          final cancellation = networkSubscription.cancel();
+          unawaited(
+            cancellation.then<void>(
+              (_) => networkCancellationSettled = true,
+              onError: (Object error, StackTrace stackTrace) {
+                networkCancellationError = error;
+                networkCancellationStackTrace = stackTrace;
+                networkCancellationSettled = true;
+              },
+            ),
+          );
+        } on Object catch (error, stackTrace) {
+          networkCancellationError = error;
+          networkCancellationStackTrace = stackTrace;
+          networkCancellationSettled = true;
+        }
+      }
       final resources = _resources.toList(growable: false);
       for (final resource in resources) {
         resource.dispose();
@@ -676,30 +724,66 @@ final class KacheClient {
       }
       final clearTail = _clearTail;
       if (clearTail != null) {
-        await clearTail;
+        try {
+          await clearTail;
+        } on Object catch (error, stackTrace) {
+          recordFailure(error, stackTrace);
+        }
       }
-      await Future.wait<void>(entries.map((entry) => entry.drainForClose()));
+      try {
+        await Future.wait<void>(
+          entries.map((entry) => entry.drainForClose()),
+        );
+      } on Object catch (error, stackTrace) {
+        recordFailure(error, stackTrace);
+      }
       if (drainWrites) {
         _globalEpoch += 1;
       }
       for (final entry in entries) {
-        await entry.finishClose();
+        try {
+          await entry.finishClose(
+            waitForBackendRead:
+                persistenceOwnership == KachePersistenceOwnership.owned,
+          );
+        } on Object catch (error, stackTrace) {
+          recordFailure(error, stackTrace);
+        }
       }
-      await _closeOwnedDependencies(span.trace);
+      try {
+        await _closeOwnedDependencies(span.trace);
+      } on _KacheCloseFailure catch (error) {
+        firstFailure ??= error;
+      }
+      // A network source owns its cancellation cleanup. Give an already
+      // settled cancellation one microtask to report an error, but never let a
+      // stalled external onCancel callback block independent client teardown.
+      await Future<void>.value();
+      final cancellationError = networkCancellationError;
+      if (networkCancellationSettled && cancellationError != null) {
+        final error = cancellationError;
+        final stackTrace = networkCancellationStackTrace!;
+        firstFailure ??= _KacheCloseFailure(
+          failure: KacheFailure(
+            kind: KacheFailureKind.lifecycle,
+            cause: error,
+            stackTrace: stackTrace,
+          ),
+          cause: error,
+          stackTrace: stackTrace,
+        );
+      }
+      final failure = firstFailure;
+      if (failure != null) {
+        span.fail(failure.failure);
+        Error.throwWithStackTrace(failure.cause, failure.stackTrace);
+      }
       span.succeed();
-    } on _KacheCloseFailure catch (error) {
-      span.fail(error.failure);
-      Error.throwWithStackTrace(error.cause, error.stackTrace);
-    } on Object catch (error, stackTrace) {
-      final failure = KacheFailure(
-        kind: KacheFailureKind.lifecycle,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-      span.fail(failure);
-      Error.throwWithStackTrace(error, stackTrace);
     } finally {
-      await _events.close();
+      // The trusted events stream is closed fire-and-forget so an externally
+      // paused subscriber can never block teardown. The terminal done event
+      // stays pending and is delivered when that subscriber resumes.
+      unawaited(_events.close());
     }
   }
 }

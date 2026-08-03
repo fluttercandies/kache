@@ -116,18 +116,25 @@ final class RepositoryProfile {
 }
 
 /// Stable JSON codec used by the example Hive CE binding.
-final HiveCeCodec<RepositoryProfile>
-repositoryProfileCodec = HiveCeCodec<RepositoryProfile>(
-  encode: (profile) =>
-      Uint8List.fromList(utf8.encode(jsonEncode(profile._toPersistedJson()))),
-  decode: (bytes) {
+final HiveCeCodec<RepositoryProfile> repositoryProfileCodec =
+    HiveCeCodec<RepositoryProfile>(
+      encode: (profile) => Uint8List.fromList(
+        utf8.encode(jsonEncode(profile._toPersistedJson())),
+      ),
+      decode: _decodePersistedRepositoryProfile,
+    );
+
+RepositoryProfile _decodePersistedRepositoryProfile(Uint8List bytes) {
+  try {
     final decoded = jsonDecode(utf8.decode(bytes));
     if (decoded is! Map<String, Object?>) {
       throw const FormatException('Persisted repository must be an object.');
     }
     return RepositoryProfile._fromPersistedJson(decoded);
-  },
-);
+  } on FormatException {
+    throw const FormatException('Persisted repository payload is invalid.');
+  }
+}
 
 Map<String, Object?> _requiredMap(Map<String, Object?> json, String key) {
   final value = json[key];

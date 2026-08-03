@@ -20,6 +20,7 @@ extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
           ? const KachePersistenceState.writing()
           : null,
     );
+    _dataRevision += 1;
     final span = trace.span(
       KacheEventKind.set,
       context: _eventContext(query),
@@ -124,6 +125,7 @@ extension _KacheEntryCommandExtensions<T> on _KacheEntry<T> {
     } else {
       _emitEmpty(null);
     }
+    _dataRevision += 1;
     final span = trace.span(KacheEventKind.remove)
       ..start(revision: _snapshot.revision);
     if (storageMode == KacheStorageMode.persisted) {

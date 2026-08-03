@@ -87,6 +87,47 @@ void main() {
     },
   );
 
+  test('failed different-key update preserves the active binding', () async {
+    final backend = MemoryKachePersistence();
+    final binding = backend.bind<String>(fingerprint: 'controller-string-v1');
+    final client = KacheClient();
+    final originalQuery = KacheQuery<String>.memory(
+      key: KacheKey('controller-atomic', <Object?>['original']),
+      policy: KachePolicy.cacheOnly(),
+    );
+    final controller = KacheController<String>(
+      client: client,
+      query: originalQuery,
+    );
+    await controller.setData('before');
+    final originalResource = controller.resource;
+
+    expect(
+      () => controller.updateQuery(
+        KacheQuery<String>.persisted(
+          key: KacheKey('controller-atomic', <Object?>['replacement']),
+          binding: binding,
+          policy: KachePolicy.cacheOnly(),
+        ),
+      ),
+      throwsA(
+        isA<KacheConfigurationException>().having(
+          (error) => error.code,
+          'code',
+          'persistence_unavailable',
+        ),
+      ),
+    );
+
+    expect(controller.query, same(originalQuery));
+    expect(controller.resource, same(originalResource));
+    expect(originalResource.isDisposed, isFalse);
+    expect((await controller.setData('after')).requireData, 'after');
+    controller.dispose();
+    await client.close();
+    await backend.close();
+  });
+
   test('pending old-key command cannot overwrite a new binding', () async {
     final client = KacheClient();
     final oldFetch = Completer<String>();

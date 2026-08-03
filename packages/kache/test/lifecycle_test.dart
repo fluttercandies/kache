@@ -48,6 +48,30 @@ void main() {
     await client.close();
   });
 
+  test('networkOnly state is discarded with the final handle', () async {
+    final scheduler = _ManualScheduler();
+    final client = KacheClient(scheduler: scheduler.schedule);
+    final key = KacheKey('network-only-lifetime');
+    final first = client.watch(
+      KacheQuery<String>.networkOnly(
+        key: key,
+        fetch: (_) async => 'transient',
+      ),
+    );
+    await first.load();
+
+    first.dispose();
+
+    expect(client.peek<String>(key), isNull);
+    expect(scheduler.pending, isEmpty);
+    final replacement = client.watch(
+      KacheQuery<int>.networkOnly(key: key, fetch: (_) async => 1),
+    );
+    expect(replacement.snapshot.hasData, isFalse);
+    replacement.dispose();
+    await client.close();
+  });
+
   test('a new reference cancels pending garbage collection', () async {
     final scheduler = _ManualScheduler();
     final client = KacheClient(scheduler: scheduler.schedule);

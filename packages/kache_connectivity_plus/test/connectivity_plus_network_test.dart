@@ -166,6 +166,40 @@ void main() {
     },
   );
 
+  test('close does not wait for a paused state subscriber', () async {
+    final source = _FakeConnectivity(
+      initial: <ConnectivityResult>[ConnectivityResult.wifi],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final done = Completer<void>();
+    final subscription = network.states.listen(
+      (_) {},
+      onDone: done.complete,
+    );
+    await source.checked;
+    subscription.pause();
+
+    await network.close().timeout(const Duration(seconds: 1));
+    expect(done.isCompleted, isFalse);
+    expect(source.cancelCount, 1);
+
+    subscription.resume();
+    await done.future;
+  });
+
+  test('close does not wait for stalled platform cancellation', () async {
+    final source = _StalledCancelConnectivity();
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final subscription = network.states.listen((_) {});
+    source.checked;
+
+    await network.close().timeout(const Duration(seconds: 1));
+
+    expect(source.cancellationStarted.isCompleted, isTrue);
+    await source.releaseCancellation();
+    await subscription.cancel();
+  });
+
   test(
     'a stream obtained before close still rejects a late listener',
     () async {
@@ -184,6 +218,24 @@ void main() {
       expect(errors.single, isA<StateError>());
     },
   );
+  test('state listeners can close the adapter synchronously', () async {
+    final source = _FakeConnectivity(
+      initial: <ConnectivityResult>[ConnectivityResult.wifi],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final closeStarted = Completer<void>();
+    late Future<void> close;
+    final subscription = network.states.listen((_) {
+      close = network.close();
+      closeStarted.complete();
+    });
+
+    await closeStarted.future;
+    await close;
+
+    expect(source.cancelCount, 1);
+    await subscription.cancel();
+  });
 }
 
 final class _FakeConnectivity implements Connectivity {
@@ -228,4 +280,32 @@ final class _FakeConnectivity implements Connectivity {
   void emitError(Object error) => _changes.addError(error);
 
   Future<void> end() => _changes.close();
+}
+
+final class _StalledCancelConnectivity implements Connectivity {
+  final Completer<void> checked = Completer<void>();
+  final Completer<void> cancellationStarted = Completer<void>();
+  final Completer<void> _cancellationGate = Completer<void>();
+  late final StreamController<List<ConnectivityResult>> _changes =
+      StreamController<List<ConnectivityResult>>(
+    sync: true,
+    onCancel: () {
+      cancellationStarted.complete();
+      return _cancellationGate.future;
+    },
+  );
+
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async {
+    checked.complete();
+    return const <ConnectivityResult>[ConnectivityResult.wifi];
+  }
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged => _changes.stream;
+
+  Future<void> releaseCancellation() async {
+    _cancellationGate.complete();
+    await _changes.close();
+  }
 }

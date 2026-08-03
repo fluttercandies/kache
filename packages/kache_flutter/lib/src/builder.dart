@@ -81,8 +81,13 @@ final class _KacheBuilderState<T> extends State<KacheBuilder<T>> {
   }
 
   void _replaceController(KacheClient client) {
-    _controller?.dispose();
+    final replacement = KacheController<T>(
+      client: client,
+      query: widget.query,
+    );
+    final previous = _controller;
     _client = client;
-    _controller = KacheController<T>(client: client, query: widget.query);
+    _controller = replacement;
+    previous?.dispose();
   }
 }
