@@ -114,8 +114,8 @@ binding。
 ## 持久化协议
 
 实现 `KachePersistenceBackend` 即可接入任意存储。核心只传递类型化 `T`、opaque
-`KachePersistenceBinding<T>` 和 `KachePersistedMetadata`。序列化、codec、schema
-迁移、加密和物理记录属于 backend 包，不属于核心。
+`KachePersistenceBinding<T>` 和 `KachePersistedMetadata`。序列化、codec、格式迁移、
+加密和物理记录属于 backend 包，不属于核心。
 
 `MemoryKachePersistence` 是进程内参考实现。需要跨重启持久化时使用
 `kache_hive_ce` 或自定义 backend。

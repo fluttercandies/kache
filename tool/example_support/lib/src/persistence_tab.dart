@@ -70,12 +70,12 @@ final class _PersistencePlaygroundHostState
         detail: 'box=${demo.borrowedBox.name}',
       ),
       PersistenceCapabilityModel(
-        title: 'Schema migration (HiveCeMigrator)',
+        title: 'Codec migration (HiveCeMigrator)',
         description:
             'bind() accepts a migrate callback that upgrades legacy payloads '
-            'automatically when an older record is read.',
-        api: 'store.bind(codecId, schema: 1, codec, migrate: ...)',
-        status: 'schema=${demo.migratorBinding.schema}',
+            'when their codec identifier differs from the current binding.',
+        api: 'store.bind(codecId, codec, migrate: ...)',
+        status: 'migrated ${demo.migratedProfile.fullName}',
         detail: 'codecId=${demo.migratorBinding.codecId}',
       ),
       PersistenceCapabilityModel(

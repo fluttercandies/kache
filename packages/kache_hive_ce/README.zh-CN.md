@@ -7,7 +7,7 @@
 [English](README.md)
 
 Kache 官方的 Hive CE 跨重启持久层。它既可以通过 native envelope 复用已注册的 Hive
-`TypeAdapter`，也可以为需要独立 schema 和迁移的存储格式使用显式 byte codec。
+`TypeAdapter`，也可以为需要独立 codec 演进的存储格式使用显式 byte codec。
 
 ## 安装
 
@@ -90,16 +90,15 @@ Future<UserCache> openUserCache(UserApi api, String userId) async {
 type id 范围 `0..65439`，包括 223 以上的扩展 id。native record 支持缓存 nullable
 值，并且与 byte-codec record 严格隔离，两种模式不会互相误读。
 
-native adapter envelope 不会额外提供 Kache schema 或迁移钩子。应按 Hive 规则保持
-adapter 的读取向后兼容；格式演进需要显式 schema 和迁移时，请改用 `bind`。
+native adapter envelope 不会额外提供 Kache 格式版本或迁移钩子。应按 Hive 规则保持
+adapter 的读取向后兼容；格式演进需要显式 codec 身份和迁移时，请改用 `bind`。
 
-缓存 payload 需要独立 byte 格式时，使用
-`bind(codecId:, schema:, codec:, migrate:)`。`codecId` 标识模型格式，发布后应保持
-稳定。`schema` 是正的 unsigned 32-bit 版本号。提升 schema 会改变 binding
-fingerprint，因此需要提供 `migrate(payload, fromSchema)` 读取旧 envelope。
+缓存 payload 需要独立 byte 格式时，使用 `bind(codecId:, codec:, migrate:)`。
+`codecId` 是该格式的唯一身份：字节解释不变时保持稳定，解释规则改变时必须更换。
+可选的 `migrate(payload, fromCodecId)` 用于读取明确支持的旧格式，并应拒绝未知 codec id。
 
-迁移会先返回类型化数据，随后由 Kache 惰性重写当前 schema。maintenance 写入失败会
-进入 persistence state 和 event，但不会隐藏已读取数据。
+迁移会立即返回类型化数据，随后由 Kache 以竞争安全的惰性 maintenance 重写当前
+`codecId`。maintenance 失败会进入 persistence state 和 event，但不会隐藏已读取数据。
 
 ## 物理键策略
 
@@ -128,11 +127,10 @@ final store = await HiveCeKacheStore.open(
 
 共享同一活动 box lease 的并发 `open` 必须使用 identity 相同的策略；不匹配会抛出
 `HiveCeOpenException`。应将策略及 HMAC secret 视为持久化存储配置。使用不同策略或
-secret 重新打开时，无法找到旧 v2 策略写入的记录，也不会迁移它们。请复用原配置；
-如需有意轮换，先调用 `clear()` 删除所有通过严格语法识别的 Kache 记录。
+secret 重新打开时，无法找到原策略写入的记录；有意轮换前应使用原配置清理它们。
 
-kache\_hive\_ce 2.0.0 写入的记录（canonical `k1:` 键）会被透明读取，并在下次访问时
-惰性迁移到新的哈希格式。
+版本 3 采用 clean cut：canonical `k1:` 键、`kache:2:` 哈希键和 v1 byte envelope 均
+不会被读取、重写或删除。它们作为宿主 Box 数据保留，直到应用显式清理或迁移。
 
 ## 损坏与错误
 
@@ -163,10 +161,10 @@ kache\_hive\_ce 2.0.0 写入的记录（canonical `k1:` 键）会被透明读取
 记录。即使 `fromBox` 使用 `HiveCeBoxOwnership.owned`，两者也都会保留无关 String
 和整数键——生命周期所有权不等于拥有 box 中的全部记录。
 
-严格的 `kache:2:[sh]:<43 字符 token>:<43 字符 token>` 语法及旧版
-`k1:<namespace token>:<parts token>` 语法为 Kache 记录保留。共享 box 的应用不得创建
-匹配任一语法的宿主键。选择性 clear 需要枚举 box 键；如果宿主保存大量无关记录，仍应
-优先使用专用 box。
+当前严格托管语法为 `kache:3:[sh]:<43 字符 token>:<43 字符 token>`。旧
+`kache:2:` 和 canonical `k1:` 键不归本版本所有。共享 box 的应用不得创建匹配 v3
+语法的宿主键。选择性 clear 需要枚举 box 键；宿主保存大量无关记录时仍应优先使用
+专用 box。
 
 ## 所有权与 open 错误
 

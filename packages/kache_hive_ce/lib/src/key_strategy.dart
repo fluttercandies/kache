@@ -1,10 +1,10 @@
 part of 'store.dart';
 
-const _kacheKeyPrefix = 'kache:2:';
+const _kacheKeyPrefix = 'kache:3:';
 const _shaCategory = 's';
 const _hmacCategory = 'h';
-const _domainNamespace = 'kache-hive-ce:namespace';
-const _domainKey = 'kache-hive-ce:key';
+const _domainNamespace = 'kache-hive-ce:v3:namespace';
+const _domainKey = 'kache-hive-ce:v3:key';
 const _domainIdentity = 'kache-hive-ce:identity';
 
 /// Controls how logical [KacheKey]s map to physical Hive box keys.
@@ -28,8 +28,8 @@ const _domainIdentity = 'kache-hive-ce:identity';
 /// secret. Do not derive the secret from the 32-bit Hive cipher key CRC.
 ///
 /// Treat the selected strategy and any HMAC secret as persistent storage
-/// configuration. A different v2 strategy cannot address existing records;
-/// use [HiveCeKacheStore.clear] before intentionally rotating it.
+/// configuration. A different strategy cannot address existing records; use
+/// [HiveCeKacheStore.clear] before intentionally rotating it.
 abstract final class HiveCeKeyStrategy {
   const HiveCeKeyStrategy._(this._category, this._identity);
 
@@ -130,35 +130,17 @@ final class _HmacSha256KeyStrategy extends HiveCeKeyStrategy {
 String _digestBase64(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
 
-/// Strict grammar for new managed physical keys:
-/// `kache:2:[sh]:<43 base64url chars>:<43 base64url chars>`.
-final _newManagedKeyPattern = RegExp(
-  r'^kache:2:[sh]:[A-Za-z0-9_-]{43}:[A-Za-z0-9_-]{43}$',
+/// Strict grammar for managed physical keys:
+/// `kache:3:[sh]:<43 base64url chars>:<43 base64url chars>`.
+final _managedKeyPattern = RegExp(
+  r'^kache:3:[sh]:[A-Za-z0-9_-]{43}:[A-Za-z0-9_-]{43}$',
 );
 
-/// Strict grammar for legacy managed keys: `k1:<base64url+>:<base64url*>`.
-final _legacyManagedKeyPattern = RegExp(
-  r'^k1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]*$',
-);
+bool _isManagedKey(String key) => _managedKeyPattern.hasMatch(key);
 
-bool _isNewManagedKey(String key) => _newManagedKeyPattern.hasMatch(key);
-
-bool _isLegacyManagedKey(String key) => _legacyManagedKeyPattern.hasMatch(key);
-
-bool _isManagedKey(String key) =>
-    _isNewManagedKey(key) || _isLegacyManagedKey(key);
-
-/// Whether [key] is a managed key belonging to [newPrefix] or [legacyPrefix].
+/// Whether [key] is a managed key belonging to [prefix].
 ///
-/// Both the prefix match and the strict grammar match must pass, preventing
-/// host keys that merely share a prefix from being deleted.
-bool _isManagedNamespaceKey(
-  String key,
-  String newPrefix,
-  String legacyPrefix,
-) {
-  if (key.startsWith(newPrefix) && _isNewManagedKey(key)) {
-    return true;
-  }
-  return key.startsWith(legacyPrefix) && _isLegacyManagedKey(key);
-}
+/// Both the prefix match and strict grammar must pass, preventing host keys
+/// that merely share a prefix from being deleted.
+bool _isManagedNamespaceKey(String key, String prefix) =>
+    key.startsWith(prefix) && _isManagedKey(key);

@@ -170,12 +170,12 @@ without discarding cached data.
 `KachePersistenceBackend` and create persisted queries with a binding owned by
 that backend. The official implementation is `kache_hive_ce`.
 
-Serialization is intentionally not part of the core package. A storage
-adapter owns codecs, physical records, schema versions, migrations, encryption
+Serialization is intentionally not part of the core package. A storage adapter
+owns codecs, physical records, format identities, migrations, encryption
 configuration, and corruption handling. The core only receives typed values
 and cache metadata. `kache_hive_ce` can reuse an already registered
 `TypeAdapter<T>` with `store.bindAdapter<T>(adapter)` or use its explicit byte
-codec binding for independent schema control.
+codec binding for independently versioned formats.
 
 ## Custom persistence
 

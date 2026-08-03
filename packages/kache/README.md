@@ -123,7 +123,7 @@ and namespace/global epochs prevent stale work from restoring removed data.
 
 Implement `KachePersistenceBackend` to connect any storage system. The core
 passes typed `T` values, an opaque `KachePersistenceBinding<T>`, and
-`KachePersistedMetadata`. Serialization, codecs, schema migration, encryption,
+`KachePersistedMetadata`. Serialization, codecs, format migration, encryption,
 and physical records belong to the backend package, not this package.
 
 `MemoryKachePersistence` is a process-local reference implementation. For

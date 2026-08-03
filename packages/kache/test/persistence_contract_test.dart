@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:kache/kache.dart';
 import 'package:test/test.dart';
 
@@ -488,8 +487,8 @@ final class _Binding<T> extends KachePersistenceBinding<T> {
 
 final class _FakeBackend implements KachePersistenceBackend {
   final Map<KacheKey, _StoredEntry> _entries = <KacheKey, _StoredEntry>{};
-
   KachePersistenceMaintenance? maintenance;
+
   int clearCount = 0;
   int closeCount = 0;
 

@@ -2,9 +2,8 @@ part of 'store.dart';
 
 /// A binding that stores values through a registered Hive CE [TypeAdapter].
 ///
-/// This binding follows the adapter's own binary compatibility contract and
-/// does not add a Kache schema or migration hook. Use [HiveCeKacheStore.bind]
-/// when the payload needs explicit schema versions and migrations.
+/// The adapter's type id identifies its native binary format. Change the type
+/// id whenever the adapter changes how stored bytes are interpreted.
 final class HiveCeAdapterBinding<T> extends KachePersistenceBinding<T> {
   HiveCeAdapterBinding._({
     required super.backend,
@@ -16,12 +15,10 @@ final class HiveCeAdapterBinding<T> extends KachePersistenceBinding<T> {
 }
 
 extension _HiveCeAdapterStore on HiveCeKacheStore {
-  Future<KachePersistenceRead<T>> _readAdapter<T>({
-    required String physicalKey,
-    required String? legacyKey,
+  KachePersistenceRead<T> _readAdapter<T>({
     required HiveCeAdapterBinding<T> binding,
     required Object raw,
-  }) async {
+  }) {
     late final HiveCeAdapterEnvelope envelope;
     try {
       envelope = HiveCeAdapterEnvelope.decode(raw);
@@ -34,7 +31,12 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
       );
     }
     if (envelope.typeId != binding.typeId) {
-      _throwCompatibility(KachePersistenceOperation.read);
+      _throwPersistence(
+        operation: KachePersistenceOperation.read,
+        stage: KachePersistenceStage.decode,
+        cause: StateError('Hive CE adapter type does not match the binding.'),
+        stackTrace: StackTrace.current,
+      );
     }
     final data = envelope.data;
     if (data is! T) {
@@ -45,29 +47,19 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
         stackTrace: StackTrace.current,
       );
     }
-    final entry = KachePersistedEntry<T>(
-      data: data,
-      metadata: KachePersistedMetadata(
-        fetchedAt: envelope.fetchedAt,
-        isInvalidated: envelope.isInvalidated,
-      ),
-    );
-    if (legacyKey == null) {
-      return KachePersistenceRead<T>(entry: entry);
-    }
     return KachePersistenceRead<T>(
-      entry: entry,
-      maintenance: () => _rewriteAdapterKey(
-        physicalKey: physicalKey,
-        legacyKey: legacyKey,
-        expectedRaw: raw,
+      entry: KachePersistedEntry<T>(
+        data: data,
+        metadata: KachePersistedMetadata(
+          fetchedAt: envelope.fetchedAt,
+          isInvalidated: envelope.isInvalidated,
+        ),
       ),
     );
   }
 
   Future<void> _writeAdapter<T>({
     required String physicalKey,
-    required String? legacyKey,
     required HiveCeAdapterBinding<T> binding,
     required KachePersistedEntry<T> entry,
   }) async {
@@ -79,9 +71,6 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
     );
     try {
       await box.put(physicalKey, record);
-      if (legacyKey != null) {
-        await box.delete(legacyKey);
-      }
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.write,
@@ -89,36 +78,6 @@ extension _HiveCeAdapterStore on HiveCeKacheStore {
         cause: error,
         stackTrace: stackTrace,
       );
-    }
-  }
-
-  void _ensureExistingAdapterCompatible(
-    String physicalKey,
-    String? legacyKey,
-    int typeId,
-  ) {
-    _checkAdapterAtKey(physicalKey, typeId);
-    if (legacyKey != null) {
-      _checkAdapterAtKey(legacyKey, typeId);
-    }
-  }
-
-  void _checkAdapterAtKey(String key, int typeId) {
-    final raw = _safeGet(key, KachePersistenceOperation.write);
-    if (raw == null) {
-      return;
-    }
-    if (raw is Uint8List) {
-      _throwCompatibility(KachePersistenceOperation.write);
-    }
-    late final HiveCeAdapterEnvelope envelope;
-    try {
-      envelope = HiveCeAdapterEnvelope.decode(raw);
-    } on Object {
-      _throwCompatibility(KachePersistenceOperation.write);
-    }
-    if (envelope.typeId != typeId) {
-      _throwCompatibility(KachePersistenceOperation.write);
     }
   }
 }

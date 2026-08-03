@@ -1,3 +1,10 @@
+## 3.0.0
+
+- Changed persistence reads to return `KachePersistenceRead<T>`, which exposes
+  typed data immediately while backend-defined maintenance runs lazily.
+- Added explicit persistence migration failure classification and made writes
+  under a new binding fingerprint authoritatively replace older entries.
+
 ## 2.0.1
 
 - Prevented late persistence reads and freshness reclassification from

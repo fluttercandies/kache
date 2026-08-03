@@ -22,6 +22,10 @@ final class _MemoryPersistenceHarness implements PersistenceContractHarness {
   final MemoryKachePersistence backend = MemoryKachePersistence();
 
   @override
+  KachePersistenceStage get fingerprintMismatchStage =>
+      KachePersistenceStage.backend;
+
+  @override
   KachePersistenceBinding<T> bind<T>({required String fingerprint}) =>
       backend.bind<T>(fingerprint: fingerprint);
 
@@ -46,12 +50,12 @@ final class _HiveCePersistenceHarness implements PersistenceContractHarness {
   final HiveCeKacheStore backend;
 
   @override
-  KachePersistenceBinding<T> bind<T>({required String fingerprint}) =>
-      backend.bind<T>(
-        codecId: fingerprint,
-        schema: 1,
-        codec: _contractCodec<T>(fingerprint),
-      );
+  KachePersistenceStage get fingerprintMismatchStage =>
+      KachePersistenceStage.migration;
+
+  @override
+  KachePersistenceBinding<T> bind<T>({required String fingerprint}) => backend
+      .bind<T>(codecId: fingerprint, codec: _contractCodec<T>(fingerprint));
 
   @override
   FutureOr<void> dispose() => backend.close();

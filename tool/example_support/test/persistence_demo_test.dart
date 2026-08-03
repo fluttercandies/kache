@@ -25,16 +25,16 @@ void main() {
     expect(demo.borrowedStore.boxOwnership, HiveCeBoxOwnership.borrowed);
     expect(demo.borrowedBox.isOpen, isTrue);
 
-    // migrator binding carries a non-null migrate callback and schema 1.
-    expect(demo.migratorBinding.schema, 1);
+    // Migrator binding carries one stable current codec id and a callback.
+    expect(demo.migratorBinding.codecId, 'github-repository-profile-json-v1');
     expect(demo.migratorBinding.migrate, isNotNull);
+    expect(demo.migratedProfile.fullName, 'flutter/flutter');
 
     // encrypted store is a real HiveCeKacheStore.
     expect(demo.encryptedStore, isA<HiveCeKacheStore>());
     final encryptedKey = KacheKey('encrypted-profile', <Object?>['account']);
     final encryptedBinding = demo.encryptedStore.bind<String>(
       codecId: 'test-string',
-      schema: 1,
       codec: HiveCeCodec<String>(encode: utf8.encode, decode: utf8.decode),
     );
     await demo.encryptedStore.write<String>(
@@ -46,7 +46,7 @@ void main() {
       ),
     );
     final physicalKey = demo.encryptedStore.box.keys.single as String;
-    expect(physicalKey, startsWith('kache:2:h:'));
+    expect(physicalKey, startsWith('kache:3:h:'));
     expect(physicalKey, isNot(encryptedKey.storageKey));
 
     // MemoryKachePersistence backs a real client + query.
@@ -165,7 +165,7 @@ void main() {
       try {
         demo.migratorBinding.migrate!(
           Uint8List.fromList(utf8.encode('{"token":"$marker",')),
-          0,
+          'github-repository-profile-json-v0',
         );
         fail('Expected malformed legacy payload to fail.');
       } on FormatException catch (error) {

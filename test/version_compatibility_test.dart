@@ -48,16 +48,16 @@ const _publishedFlutterConstraints = <String, String>{
 };
 
 const _workspaceExpectedVersions = <String, String>{
-  '.': '2.0.0',
-  'packages/kache': '2.0.1',
-  'packages/kache_flutter': '2.0.1',
-  'packages/kache_flutter_hooks': '2.0.0',
-  'packages/kache_hive_ce': '2.1.0',
-  'packages/kache_hooks_riverpod': '2.0.0',
-  'packages/kache_riverpod': '2.0.0',
-  'packages/kache_bloc': '2.0.1',
-  'packages/kache_connectivity_plus': '2.0.1',
-  'packages/kache_provider': '2.0.1',
+  '.': '3.0.0',
+  'packages/kache': '3.0.0',
+  'packages/kache_flutter': '3.0.0',
+  'packages/kache_flutter_hooks': '3.0.0',
+  'packages/kache_hive_ce': '3.0.0',
+  'packages/kache_hooks_riverpod': '3.0.0',
+  'packages/kache_riverpod': '3.0.0',
+  'packages/kache_bloc': '3.0.0',
+  'packages/kache_connectivity_plus': '3.0.0',
+  'packages/kache_provider': '3.0.0',
   'examples/kache_flutter_example': '2.0.0',
   'examples/kache_riverpod_example': '2.0.0',
   'examples/kache_bloc_example': '2.0.0',
@@ -181,7 +181,7 @@ void main() {
       'kache_provider',
       'kache_riverpod',
     ]) {
-      _expectDependency('.', dependency, '^2.0.0', dev: true);
+      _expectDependency('.', dependency, '^3.0.0', dev: true);
     }
   });
 
@@ -215,7 +215,7 @@ void main() {
       ('packages/kache_connectivity_plus', 'kache'),
       ('packages/kache_provider', 'kache_flutter'),
     ]) {
-      _expectDependency(entry.$1, entry.$2, '^2.0.0');
+      _expectDependency(entry.$1, entry.$2, '^3.0.0');
     }
   });
 

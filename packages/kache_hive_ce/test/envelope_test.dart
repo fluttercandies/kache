@@ -6,26 +6,24 @@ import 'package:kache_hive_ce/src/envelope.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('v1 envelope matches the fixed golden bytes', () {
+  test('v2 envelope matches the fixed golden bytes', () {
     final encoded = HiveCeEnvelope.encode(
       fetchedAt: DateTime.fromMicrosecondsSinceEpoch(1, isUtc: true),
       isInvalidated: true,
-      schema: 2,
       codecId: 'json',
       payload: Uint8List.fromList(utf8.encode('{}')),
     );
 
     expect(
       _hex(encoded),
-      '4b434831010000000000000001000000020004000000026a736f6e7b7d',
+      '4b4348320100000000000000010004000000026a736f6e7b7d',
     );
   });
 
-  test('decodes every v1 field and owns payload bytes', () {
+  test('decodes every v2 field and owns payload bytes', () {
     final bytes = HiveCeEnvelope.encode(
       fetchedAt: DateTime.utc(2026, 1, 2, 3, 4, 5),
       isInvalidated: false,
-      schema: 7,
       codecId: 'profile-json',
       payload: Uint8List.fromList(<int>[1, 2, 3]),
     );
@@ -35,7 +33,6 @@ void main() {
 
     expect(decoded.fetchedAt, DateTime.utc(2026, 1, 2, 3, 4, 5));
     expect(decoded.isInvalidated, isFalse);
-    expect(decoded.schema, 7);
     expect(decoded.codecId, 'profile-json');
     expect(decoded.payload, orderedEquals(<int>[1, 2, 3]));
   });
@@ -47,7 +44,6 @@ void main() {
       HiveCeEnvelope.encode(
         fetchedAt: fetchedAt,
         isInvalidated: false,
-        schema: 1,
         codecId: 'text',
         payload: Uint8List(0),
       ),
@@ -60,7 +56,6 @@ void main() {
     final valid = HiveCeEnvelope.encode(
       fetchedAt: DateTime.utc(2026),
       isInvalidated: false,
-      schema: 1,
       codecId: 'text',
       payload: Uint8List.fromList(<int>[1]),
     );
@@ -79,22 +74,11 @@ void main() {
     }
   });
 
-  test('validates schema and codec identifiers before encoding', () {
+  test('validates codec identifiers before encoding', () {
     expect(
       () => HiveCeEnvelope.encode(
         fetchedAt: DateTime.utc(2026),
         isInvalidated: false,
-        schema: 0,
-        codecId: 'text',
-        payload: Uint8List(0),
-      ),
-      throwsArgumentError,
-    );
-    expect(
-      () => HiveCeEnvelope.encode(
-        fetchedAt: DateTime.utc(2026),
-        isInvalidated: false,
-        schema: 1,
         codecId: '',
         payload: Uint8List(0),
       ),

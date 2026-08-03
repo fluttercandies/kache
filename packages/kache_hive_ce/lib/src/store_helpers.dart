@@ -44,18 +44,22 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
     }
   }
 
-  T _migrate<T>(HiveCeBinding<T> binding, Uint8List payload, int fromSchema) {
+  T _migrate<T>(
+    HiveCeBinding<T> binding,
+    Uint8List payload,
+    String fromCodecId,
+  ) {
     final migrate = binding.migrate;
     if (migrate == null) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
         stage: KachePersistenceStage.migration,
-        cause: StateError('No migration is configured for the stored schema.'),
+        cause: StateError('No migration is configured for the stored codec.'),
         stackTrace: StackTrace.current,
       );
     }
     try {
-      return migrate(Uint8List.fromList(payload), fromSchema);
+      return migrate(Uint8List.fromList(payload), fromCodecId);
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
@@ -71,43 +75,25 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
     KachePersistedEntry<T> entry,
     Uint8List expectedRecord, {
     required String physicalKey,
-    required String? legacyKey,
   }) async {
     try {
       _ensureOpen(KachePersistenceOperation.read);
-      final sourceKey = legacyKey ?? physicalKey;
-      final current = box.get(sourceKey);
+      final current = box.get(physicalKey);
       if (current is! Uint8List || !_bytesEqual(current, expectedRecord)) {
         return;
-      }
-      if (legacyKey != null) {
-        final existingPhysical = box.get(physicalKey);
-        if (existingPhysical != null) {
-          await box.delete(legacyKey);
-          return;
-        }
       }
       final payload = Uint8List.fromList(binding.codec.encode(entry.data));
       final record = HiveCeEnvelope.encode(
         fetchedAt: entry.metadata.fetchedAt,
         isInvalidated: entry.metadata.isInvalidated,
-        schema: binding.schema,
         codecId: binding.codecId,
         payload: payload,
       );
-      final latestSource = box.get(sourceKey);
-      if (latestSource is! Uint8List ||
-          !_bytesEqual(latestSource, expectedRecord)) {
-        return;
-      }
-      if (legacyKey != null && box.get(physicalKey) != null) {
-        await box.delete(legacyKey);
+      final latest = box.get(physicalKey);
+      if (latest is! Uint8List || !_bytesEqual(latest, expectedRecord)) {
         return;
       }
       await box.put(physicalKey, record);
-      if (legacyKey != null) {
-        await box.delete(legacyKey);
-      }
     } on KachePersistenceException catch (error) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
@@ -122,72 +108,6 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
         cause: error,
         stackTrace: stackTrace,
       );
-    }
-  }
-
-  Future<void> _rewriteAdapterKey({
-    required String physicalKey,
-    required String legacyKey,
-    required Object expectedRaw,
-  }) async {
-    try {
-      _ensureOpen(KachePersistenceOperation.read);
-      final current = box.get(legacyKey);
-      if (current == null || !identical(current, expectedRaw)) {
-        return;
-      }
-      final existingPhysical = box.get(physicalKey);
-      if (existingPhysical != null) {
-        await box.delete(legacyKey);
-        return;
-      }
-      await box.put(physicalKey, expectedRaw);
-      await box.delete(legacyKey);
-    } on KachePersistenceException catch (error) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.migration,
-        cause: error.cause,
-        stackTrace: error.stackTrace,
-      );
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.migration,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
-
-  void _ensureExistingCodecCompatible(
-    String physicalKey,
-    String? legacyKey,
-    String codecId,
-  ) {
-    _checkCodecAtKey(physicalKey, codecId);
-    if (legacyKey != null) {
-      _checkCodecAtKey(legacyKey, codecId);
-    }
-  }
-
-  void _checkCodecAtKey(String key, String codecId) {
-    final raw = _safeGet(key, KachePersistenceOperation.write);
-    if (raw == null) {
-      return;
-    }
-    if (raw is! Uint8List) {
-      _throwCompatibility(KachePersistenceOperation.write);
-    }
-    try {
-      final envelope = HiveCeEnvelope.decode(raw);
-      if (envelope.codecId != codecId) {
-        _throwCompatibility(KachePersistenceOperation.write);
-      }
-    } on KachePersistenceException {
-      rethrow;
-    } on Object {
-      _throwCompatibility(KachePersistenceOperation.write);
     }
   }
 
@@ -208,14 +128,6 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
 
   String _physicalNamespacePrefix(KacheNamespace namespace) =>
       _keyStrategy._formatNamespacePrefix(namespace);
-
-  String? _legacyKeyOf(KacheKey key) {
-    final canonical = key.storageKey;
-    if (canonical.length <= 255) {
-      return canonical;
-    }
-    return null;
-  }
 
   Future<void> _runBackend(
     KachePersistenceOperation operation,

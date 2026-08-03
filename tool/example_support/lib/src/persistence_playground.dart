@@ -34,7 +34,7 @@ final class PersistenceCapabilityModel {
 ///
 /// This tab is adapter-agnostic because it talks directly to the persistence
 /// backends via the host runtime; it renders one card per demonstrated
-/// capability so users can see how to wire Hive CE, schema migration, encrypted
+/// capability so users can see how to wire Hive CE, codec migration, encrypted
 /// boxes, and the in-memory backend.
 class PersistencePlayground extends StatelessWidget {
   /// Creates the persistence playground.
@@ -49,7 +49,7 @@ class PersistencePlayground extends StatelessWidget {
     children: <Widget>[
       Text(
         'These cards exercise the persistence API surface directly: Hive CE box '
-        'ownership, schema migration, encrypted boxes, and the SDK-only in-memory '
+        'ownership, codec migration, encrypted boxes, and the SDK-only in-memory '
         'backend. They are identical across all four example adapters.',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
           color: Theme.of(context).colorScheme.onSurfaceVariant,

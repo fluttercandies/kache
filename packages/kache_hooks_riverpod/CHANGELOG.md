@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache Riverpod dependency to `^3.0.0`; Hooks
+  Riverpod lifecycle behavior is unchanged.
+
 ## 2.0.0
 
 - Added `KacheProviderBinding.cancel()` without creating a second resource or

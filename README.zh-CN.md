@@ -157,10 +157,10 @@ Flutter 应用可使用官方 `kache_connectivity_plus` 适配包。网络接口
 `KachePersistenceBackend`，并通过后端创建的 binding 声明 persisted query。官方
 实现是 `kache_hive_ce`。
 
-序列化不属于核心包。存储适配器负责 codec、物理记录、schema 版本、迁移、加密配置
-和损坏恢复；核心只处理类型化数据和缓存元数据。`kache_hive_ce` 可以通过
+序列化不属于核心包。存储适配器负责 codec、物理记录、格式身份、迁移、加密配置和损坏
+恢复；核心只处理类型化数据和缓存元数据。`kache_hive_ce` 可以通过
 `store.bindAdapter<T>(adapter)` 复用已注册的 `TypeAdapter<T>`，也可以使用显式 byte
-codec binding 获得独立 schema 控制。
+codec binding 独立演进存储格式。
 
 ## 自定义持久层
 

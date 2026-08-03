@@ -62,8 +62,7 @@ final class ExampleRuntime {
     KacheObserver? observer,
   }) {
     final binding = store.bind<RepositoryProfile>(
-      codecId: 'github-repository-profile-json',
-      schema: 1,
+      codecId: 'github-repository-profile-json-v1',
       codec: repositoryProfileCodec,
     );
     final client = KacheClient(

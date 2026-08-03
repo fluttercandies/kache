@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'key.dart';
 
 /// A storage backend that persists typed cache entries.
@@ -17,8 +16,9 @@ abstract interface class KachePersistenceBackend {
   /// The [binding] describes backend-specific handling for `T`. Implementations
   /// should call [KachePersistenceBinding.ensureBackend] before using it.
   /// Storage access failures use [KachePersistenceStage.backend], initial value
-  /// interpretation failures use [KachePersistenceStage.decode], and deferred
-  /// maintenance failures use [KachePersistenceStage.migration].
+  /// interpretation failures use [KachePersistenceStage.decode], and format
+  /// migration or deferred maintenance failures use
+  /// [KachePersistenceStage.migration].
   Future<KachePersistenceRead<T>?> read<T>({
     required KacheKey key,
     required KachePersistenceBinding<T> binding,
@@ -262,7 +262,7 @@ enum KachePersistenceStage {
   /// Decoding a stored value into a typed value.
   decode,
 
-  /// Migrating a stored value between backend-defined versions.
+  /// Migrating a stored value between backend-defined formats.
   migration,
 }
 

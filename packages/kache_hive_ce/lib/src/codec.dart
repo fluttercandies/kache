@@ -12,5 +12,11 @@ final class HiveCeCodec<T> {
   final T Function(Uint8List bytes) decode;
 }
 
-/// Migrates an older schema payload into the binding's current typed value.
-typedef HiveCeMigrator<T> = T Function(Uint8List payload, int fromSchema);
+/// Migrates payload bytes written under [fromCodecId] into the current model.
+///
+/// The payload is an owned copy. Implementations should accept only explicitly
+/// supported identifiers and throw for every unknown format.
+typedef HiveCeMigrator<T> = T Function(
+  Uint8List payload,
+  String fromCodecId,
+);

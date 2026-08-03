@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache dependency to `^3.0.0`; native Riverpod
+  provider semantics are unchanged.
+
 ## 2.0.0
 
 - Added `KacheNotifier.cancel()` for the provider resource's shared key fetch.

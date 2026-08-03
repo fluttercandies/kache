@@ -435,7 +435,9 @@ final class _FixedReadPersistence implements KachePersistenceBackend {
     if (entry == null) {
       return null;
     }
-    return KachePersistenceRead<T>(entry: entry as KachePersistedEntry<T>);
+    return KachePersistenceRead<T>(
+      entry: entry as KachePersistedEntry<T>,
+    );
   }
 
   @override

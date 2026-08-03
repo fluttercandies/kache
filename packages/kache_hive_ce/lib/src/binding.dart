@@ -5,41 +5,35 @@ final class HiveCeBinding<T> extends KachePersistenceBinding<T> {
   HiveCeBinding._({
     required super.backend,
     required this.codecId,
-    required this.schema,
     required this.codec,
     required this.migrate,
     required bool hasTypeConflict,
   })  : _hasTypeConflict = hasTypeConflict,
-        super(fingerprint: _bindingFingerprint(codecId, schema));
+        super(fingerprint: _bindingFingerprint(codecId));
 
-  /// Stable identifier written into every physical record.
+  /// Sole stable identifier for the encoded payload format.
+  ///
+  /// Change this identifier whenever [codec] changes how bytes are interpreted.
   final String codecId;
 
-  /// Current positive unsigned 32-bit model schema.
-  final int schema;
-
-  /// Typed payload codec for [schema].
+  /// Typed payload codec identified by [codecId].
   final HiveCeCodec<T> codec;
 
-  /// Optional older-schema migration callback.
+  /// Optional migration from a previous codec identifier.
   final HiveCeMigrator<T>? migrate;
 
   final bool _hasTypeConflict;
 }
 
-String _bindingFingerprint(String codecId, int schema) {
+String _bindingFingerprint(String codecId) {
   final encodedId = base64Url.encode(utf8.encode(codecId)).replaceAll('=', '');
-  return 'hive-ce:v1:$encodedId:$schema';
+  return 'hive-ce:bytes:v2:$encodedId';
 }
 
-void _validateBindingConfiguration({
-  required String codecId,
-  required int schema,
-}) {
+void _validateBindingConfiguration({required String codecId}) {
   HiveCeEnvelope.encode(
     fetchedAt: DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
     isInvalidated: false,
-    schema: schema,
     codecId: codecId,
     payload: Uint8List(0),
   );

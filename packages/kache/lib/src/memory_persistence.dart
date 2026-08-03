@@ -8,10 +8,12 @@ import 'persistence.dart';
 /// tests, and environments where callers intentionally own object mutation.
 /// Entries do not survive process termination.
 ///
-/// Each stored key is bound to the binding fingerprint and reified type used
-/// for its first write. Later reads and writes for that key must use the same
-/// fingerprint and type. [close] is idempotent, releases all retained values,
-/// and causes every later operation other than [close] to fail.
+/// Each stored key records the binding fingerprint and reified type used by
+/// its latest write. Reads require an exact match. A write under a new
+/// fingerprint authoritatively replaces the prior value; reusing one
+/// fingerprint for a different reified type remains an error. [close] is
+/// idempotent, releases all retained values, and causes every later operation
+/// other than [close] to fail.
 final class MemoryKachePersistence implements KachePersistenceBackend {
   final Map<String, _MemoryPersistedRecord> _entries =
       <String, _MemoryPersistedRecord>{};
@@ -63,11 +65,12 @@ final class MemoryKachePersistence implements KachePersistenceBackend {
     binding.ensureBackend(this);
 
     final existing = _entries[key.storageKey];
-    if (existing != null) {
-      _ensureCompatible<T>(
-        record: existing,
-        binding: binding,
-        operation: KachePersistenceOperation.write,
+    if (existing != null &&
+        existing.fingerprint == binding.fingerprint &&
+        existing.type != T) {
+      _throwBackendFailure(
+        KachePersistenceOperation.write,
+        'Memory persistence fingerprint cannot change its value type.',
       );
     }
     _entries[key.storageKey] = _MemoryPersistedRecord(

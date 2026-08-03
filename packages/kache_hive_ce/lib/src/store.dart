@@ -45,7 +45,7 @@ final class HiveCeOpenException implements Exception {
   String toString() => 'HiveCeOpenException: failed to open a Hive CE box.';
 }
 
-/// A Hive CE persistence backend using versioned byte envelopes.
+/// A Hive CE persistence backend using one current byte-envelope format.
 final class HiveCeKacheStore implements KachePersistenceBackend {
   HiveCeKacheStore._({
     required this.box,
@@ -140,20 +140,23 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   final HiveCeKeyStrategy _keyStrategy;
 
   /// Creates a typed binding owned by this exact store.
+  ///
+  /// [codecId] is the sole identity of [codec]'s byte format. Change it when
+  /// the encoded representation changes. An optional [migrate] callback can
+  /// preserve offline data written under a previous codec identifier; without
+  /// one, core recovery discards the incompatible cache record and refetches.
   HiveCeBinding<T> bind<T>({
     required String codecId,
-    required int schema,
     required HiveCeCodec<T> codec,
     HiveCeMigrator<T>? migrate,
   }) {
-    _validateBindingConfiguration(codecId: codecId, schema: schema);
+    _validateBindingConfiguration(codecId: codecId);
     final existingType = _codecTypes[codecId];
     final hasTypeConflict = existingType != null && existingType != T;
     _codecTypes.putIfAbsent(codecId, () => T);
     return HiveCeBinding<T>._(
       backend: this,
       codecId: codecId,
-      schema: schema,
       codec: codec,
       migrate: migrate,
       hasTypeConflict: hasTypeConflict,
@@ -196,48 +199,13 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       KachePersistenceOperation.read,
     );
     final physicalKey = _physicalKeyOf(key);
-    final legacyKey = _legacyKeyOf(key);
-
-    Object? raw;
-    try {
-      raw = box.get(physicalKey);
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.backend,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    String? sourceLegacyKey;
-    if (raw == null && legacyKey != null) {
-      try {
-        raw = box.get(legacyKey);
-      } on Object catch (error, stackTrace) {
-        _throwPersistence(
-          operation: KachePersistenceOperation.read,
-          stage: KachePersistenceStage.backend,
-          cause: error,
-          stackTrace: stackTrace,
-        );
-      }
-      if (raw != null) {
-        sourceLegacyKey = legacyKey;
-      }
-    }
-
+    final raw = _safeGet(physicalKey, KachePersistenceOperation.read);
     if (raw == null) {
       return null;
     }
 
     if (hiveBinding is HiveCeAdapterBinding<T>) {
-      return _readAdapter<T>(
-        physicalKey: physicalKey,
-        legacyKey: sourceLegacyKey,
-        binding: hiveBinding,
-        raw: raw,
-      );
+      return _readAdapter<T>(binding: hiveBinding, raw: raw);
     }
     if (raw is! Uint8List) {
       _throwPersistence(
@@ -247,27 +215,12 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
         stackTrace: StackTrace.current,
       );
     }
-    final rawBytes = raw;
     final byteBinding = hiveBinding as HiveCeBinding<T>;
-    final envelope = _decodeEnvelope(rawBytes);
-    if (envelope.codecId != byteBinding.codecId) {
-      _throwCompatibility(KachePersistenceOperation.read);
-    }
-    if (envelope.schema > byteBinding.schema) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.migration,
-        cause: StateError('Stored schema is newer than the binding schema.'),
-        stackTrace: StackTrace.current,
-      );
-    }
-
-    final T data;
-    if (envelope.schema == byteBinding.schema) {
-      data = _decodeCurrent(byteBinding, envelope.payload);
-    } else {
-      data = _migrate(byteBinding, envelope.payload, envelope.schema);
-    }
+    final envelope = _decodeEnvelope(raw);
+    final isCurrentFormat = envelope.codecId == byteBinding.codecId;
+    final data = isCurrentFormat
+        ? _decodeCurrent(byteBinding, envelope.payload)
+        : _migrate(byteBinding, envelope.payload, envelope.codecId);
     final entry = KachePersistedEntry<T>(
       data: data,
       metadata: KachePersistedMetadata(
@@ -275,18 +228,17 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
         isInvalidated: envelope.isInvalidated,
       ),
     );
-    final needsSchemaMigration = envelope.schema != byteBinding.schema;
-    if (!needsSchemaMigration && sourceLegacyKey == null) {
+    if (isCurrentFormat) {
       return KachePersistenceRead<T>(entry: entry);
     }
+    final expectedRecord = Uint8List.fromList(raw);
     return KachePersistenceRead<T>(
       entry: entry,
       maintenance: () => _rewriteMigrated<T>(
         byteBinding,
         entry,
-        rawBytes,
+        expectedRecord,
         physicalKey: physicalKey,
-        legacyKey: sourceLegacyKey,
       ),
     );
   }
@@ -303,20 +255,15 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       KachePersistenceOperation.write,
     );
     final physicalKey = _physicalKeyOf(key);
-    final legacyKey = _legacyKeyOf(key);
     if (hiveBinding is HiveCeAdapterBinding<T>) {
-      _ensureExistingAdapterCompatible(
-          physicalKey, legacyKey, hiveBinding.typeId);
       await _writeAdapter<T>(
         physicalKey: physicalKey,
-        legacyKey: legacyKey,
         binding: hiveBinding,
         entry: entry,
       );
       return;
     }
     final byteBinding = hiveBinding as HiveCeBinding<T>;
-    _ensureExistingCodecCompatible(physicalKey, legacyKey, byteBinding.codecId);
     late final Uint8List payload;
     try {
       payload = Uint8List.fromList(byteBinding.codec.encode(entry.data));
@@ -331,51 +278,33 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     final record = HiveCeEnvelope.encode(
       fetchedAt: entry.metadata.fetchedAt,
       isInvalidated: entry.metadata.isInvalidated,
-      schema: byteBinding.schema,
       codecId: byteBinding.codecId,
       payload: payload,
     );
-    try {
-      await box.put(physicalKey, record);
-      if (legacyKey != null) {
-        await box.delete(legacyKey);
-      }
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.write,
-        stage: KachePersistenceStage.backend,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-    }
+    await _runBackend(
+      KachePersistenceOperation.write,
+      () => box.put(physicalKey, record),
+    );
   }
 
   @override
   Future<void> delete({required KacheKey key}) async {
     _ensureOpen(KachePersistenceOperation.delete);
-    final physicalKey = _physicalKeyOf(key);
-    final legacyKey = _legacyKeyOf(key);
-    final keys = legacyKey == null
-        ? <String>[physicalKey]
-        : <String>[physicalKey, legacyKey];
     await _runBackend(
       KachePersistenceOperation.delete,
-      () => box.deleteAll(keys),
+      () => box.delete(_physicalKeyOf(key)),
     );
   }
 
   @override
   Future<void> clearNamespace({required KacheNamespace namespace}) async {
     _ensureOpen(KachePersistenceOperation.clearNamespace);
-    final newPrefix = _physicalNamespacePrefix(namespace);
-    final legacyPrefix = namespace.storagePrefix;
+    final prefix = _physicalNamespacePrefix(namespace);
     late final List<String> keys;
     try {
       keys = box.keys
           .whereType<String>()
-          .where(
-            (key) => _isManagedNamespaceKey(key, newPrefix, legacyPrefix),
-          )
+          .where((key) => _isManagedNamespaceKey(key, prefix))
           .toList(growable: false);
     } on Object catch (error, stackTrace) {
       _throwPersistence(

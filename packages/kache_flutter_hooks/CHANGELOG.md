@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache Flutter dependency to `^3.0.0`; Hook lifecycle
+  and resource ownership behavior is unchanged.
+
 ## 2.0.0
 
 - Exposed key-scoped cancellation through the returned `KacheController`.

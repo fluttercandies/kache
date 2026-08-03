@@ -8,7 +8,7 @@
 
 The official restart-safe Hive CE persistence backend for Kache. It can reuse
 registered Hive `TypeAdapter` classes through a native envelope or use explicit
-byte codecs for storage formats that need independent schemas and migrations.
+byte codecs for storage formats that need independent codec evolution.
 
 ## Installation
 
@@ -93,18 +93,18 @@ Hive CE external type id range `0..65439`, including extended ids above 223,
 is supported. Native records support nullable cached values and are isolated
 from byte-codec records, so one mode can never reinterpret the other.
 
-The native adapter envelope does not add a Kache schema or migration hook.
-Keep adapter reads backward-compatible under Hive's rules, or use `bind` when
-format evolution needs explicit schema versions and migrations.
+The native adapter envelope does not add a Kache format version or migration
+hook. Keep adapter reads backward-compatible under Hive's rules, or use `bind`
+when format evolution needs an explicit codec identity and migration.
 
-Use `bind(codecId:, schema:, codec:, migrate:)` when the cache payload needs an
-independent byte format. `codecId` identifies that model format and must remain
-stable. `schema` is a positive unsigned 32-bit version. Increasing the schema
-changes the binding fingerprint, so provide `migrate(payload, fromSchema)` to
-read older envelopes.
+Use `bind(codecId:, codec:, migrate:)` when the cache payload needs an
+independent byte format. `codecId` is the sole identity of that format: keep it
+stable while the bytes retain the same interpretation and change it whenever
+the interpretation changes. An optional `migrate(payload, fromCodecId)` reads
+supported older formats; it should reject every unknown codec identifier.
 
-Migration returns typed data immediately. Kache then schedules lazy
-maintenance to rewrite the record with the current schema. A maintenance write
+Migration returns typed data immediately. Kache then schedules race-safe lazy
+maintenance to rewrite the record under the current `codecId`. A maintenance
 failure remains visible in persistence state and events without hiding data.
 
 ## Physical key strategy
@@ -140,12 +140,12 @@ final store = await HiveCeKacheStore.open(
 Every concurrent `open` sharing an active box lease must use the same strategy
 identity; a mismatch throws `HiveCeOpenException`. Treat the strategy and HMAC
 secret as persistent storage configuration. Reopening with a different strategy
-or secret cannot find records written under the previous v2 strategy and does
-not migrate them. Reuse the original configuration, or call `clear()` to remove
-all strictly recognized Kache records before intentionally rotating it.
+or secret cannot find records written under the original strategy. Clear them
+with the original configuration before intentionally rotating it.
 
-Records written by kache\_hive\_ce 2.0.0 (canonical `k1:` keys) are read
-transparently and lazily migrated to the new hashed format on the next access.
+Version 3 is a clean cut: canonical `k1:` keys, `kache:2:` hashed keys, and v1
+byte envelopes are not read, rewritten, or removed. They remain host-owned box
+data until the application explicitly purges or migrates them.
 
 ## Corruption and errors
 
@@ -182,11 +182,12 @@ preserve unrelated String and integer keys, including when `fromBox` uses
 `HiveCeBoxOwnership.owned`—lifecycle ownership does not imply ownership of every
 record in the box.
 
-The strict `kache:2:[sh]:<43-char token>:<43-char token>` grammar and the legacy
-`k1:<namespace token>:<parts token>` grammar are reserved for Kache records.
-Applications sharing a box must not create host keys matching either grammar.
-Selective clear enumerates the box keys, so a dedicated box remains preferable
-when the host stores a very large number of unrelated records.
+The strict managed grammar is
+`kache:3:[sh]:<43-char token>:<43-char token>`. Older `kache:2:` and canonical
+`k1:` keys are not owned by this version. Applications sharing a box must not
+create host keys matching the v3 grammar. Selective clear enumerates box keys,
+so a dedicated box remains preferable when the host stores many unrelated
+records.
 
 ## Ownership and open errors
 

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-const _headerLength = 23;
+const _headerLength = 19;
 const _invalidatedFlag = 0x01;
 const _knownFlags = _invalidatedFlag;
 const _maximumUint16 = 0xffff;
@@ -9,14 +9,13 @@ const _maximumUint32 = 0xffffffff;
 const _maximumSafeInteger = 9007199254740991;
 const _minimumSafeInteger = -_maximumSafeInteger;
 const _twoTo32 = 4294967296;
-const _magic = <int>[0x4b, 0x43, 0x48, 0x31];
+const _magic = <int>[0x4b, 0x43, 0x48, 0x32];
 
 /// The decoded physical Hive CE record envelope.
 final class HiveCeEnvelope {
   const HiveCeEnvelope._({
     required this.fetchedAt,
     required this.isInvalidated,
-    required this.schema,
     required this.codecId,
     required this.payload,
   });
@@ -27,30 +26,19 @@ final class HiveCeEnvelope {
   /// Whether the cache value was explicitly invalidated.
   final bool isInvalidated;
 
-  /// Backend-owned model schema.
-  final int schema;
-
   /// Stable codec identifier.
   final String codecId;
 
   /// Owned encoded model bytes.
   final Uint8List payload;
 
-  /// Encodes the fixed `KCH1` record format.
+  /// Encodes the fixed `KCH2` record format.
   static Uint8List encode({
     required DateTime fetchedAt,
     required bool isInvalidated,
-    required int schema,
     required String codecId,
     required Uint8List payload,
   }) {
-    if (schema <= 0 || schema > _maximumUint32) {
-      throw ArgumentError.value(
-        schema,
-        'schema',
-        'Must be in the unsigned 32-bit range starting at one.',
-      );
-    }
     final codecBytes = utf8.encode(codecId);
     if (codecId.isEmpty ||
         codecBytes.length > _maximumUint16 ||
@@ -83,9 +71,8 @@ final class HiveCeEnvelope {
     bytes[4] = isInvalidated ? _invalidatedFlag : 0;
     final data = ByteData.sublistView(bytes);
     _setSafeInt64(data, 5, fetchedAtMicros);
-    data.setUint32(13, schema, Endian.big);
-    data.setUint16(17, codecBytes.length, Endian.big);
-    data.setUint32(19, payload.length, Endian.big);
+    data.setUint16(13, codecBytes.length, Endian.big);
+    data.setUint32(15, payload.length, Endian.big);
     bytes.setRange(
       _headerLength,
       _headerLength + codecBytes.length,
@@ -95,7 +82,7 @@ final class HiveCeEnvelope {
     return bytes;
   }
 
-  /// Decodes and strictly validates the fixed `KCH1` record format.
+  /// Decodes and strictly validates the fixed `KCH2` record format.
   static HiveCeEnvelope decode(Uint8List bytes) {
     if (bytes.length < _headerLength) {
       throw const FormatException('Hive CE record is truncated.');
@@ -112,12 +99,8 @@ final class HiveCeEnvelope {
 
     final data = ByteData.sublistView(bytes);
     final fetchedAtMicros = _getSafeInt64(data, 5);
-    final schema = data.getUint32(13, Endian.big);
-    final codecLength = data.getUint16(17, Endian.big);
-    final payloadLength = data.getUint32(19, Endian.big);
-    if (schema == 0) {
-      throw const FormatException('Hive CE record schema is invalid.');
-    }
+    final codecLength = data.getUint16(13, Endian.big);
+    final payloadLength = data.getUint32(15, Endian.big);
     final expectedLength = _headerLength + codecLength + payloadLength;
     if (expectedLength != bytes.length) {
       throw const FormatException('Hive CE record length is inconsistent.');
@@ -148,7 +131,6 @@ final class HiveCeEnvelope {
     return HiveCeEnvelope._(
       fetchedAt: fetchedAt,
       isInvalidated: flags & _invalidatedFlag != 0,
-      schema: schema,
       codecId: codecId,
       payload: Uint8List.fromList(
         bytes.sublist(_headerLength + codecLength, expectedLength),

@@ -24,6 +24,7 @@ final class PersistenceDemo {
     required this.borrowedStore,
     required this.borrowedBox,
     required this.migratorBinding,
+    required this.migratedProfile,
     required this.encryptedStore,
     required this.memoryBackend,
     required this.memoryClient,
@@ -58,13 +59,16 @@ final class PersistenceDemo {
         ownership: HiveCeBoxOwnership.borrowed,
       );
 
-      // 2) bind() with a HiveCeMigrator that upgrades a legacy schema-0 payload.
-      //    The migrator runs automatically when an older record is read.
+      // 2) bind() with a HiveCeMigrator that upgrades an older codec payload.
+      //    The migrator runs automatically when the codec identifier changes.
       final migratorBinding = borrowedStore.bind<RepositoryProfile>(
-        codecId: 'github-repository-profile-json',
-        schema: 1,
+        codecId: 'github-repository-profile-json-v1',
         codec: repositoryProfileCodec,
         migrate: _migrateFromLegacy,
+      );
+      final legacyBinding = borrowedStore.bind<RepositoryProfile>(
+        codecId: 'github-repository-profile-json-v0',
+        codec: _legacyRepositoryProfileCodec,
       );
 
       // 3) An encrypted box opened with a caller-owned HiveCipher. HMAC key
@@ -99,11 +103,32 @@ final class PersistenceDemo {
         debugName: 'persistence-demo memory backend',
       );
       final memorySnapshot = await memoryClient.prefetch(memoryQuery);
+      final migrationKey = KacheKey(
+        'persistence-demo-codec-migration',
+        <Object?>[memorySnapshot.requireData.fullName],
+      );
+      await borrowedStore.write<RepositoryProfile>(
+        key: migrationKey,
+        binding: legacyBinding,
+        entry: KachePersistedEntry<RepositoryProfile>(
+          data: memorySnapshot.requireData,
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.now().toUtc()),
+        ),
+      );
+      final migrationRead = await borrowedStore.read<RepositoryProfile>(
+        key: migrationKey,
+        binding: migratorBinding,
+      );
+      if (migrationRead == null) {
+        throw StateError('Codec migration did not return the seeded record.');
+      }
+      await migrationRead.runMaintenance();
 
       return PersistenceDemo._(
         borrowedStore: borrowedStore,
         borrowedBox: borrowedBox,
         migratorBinding: migratorBinding,
+        migratedProfile: migrationRead.entry.data,
         encryptedStore: encryptedStore,
         memoryBackend: memoryBackend,
         memoryClient: memoryClient,
@@ -135,8 +160,11 @@ final class PersistenceDemo {
   /// The raw Hive box that [borrowedStore] wraps; owned by this demo.
   final Box<Object?> borrowedBox;
 
-  /// Binding that carries a [HiveCeMigrator] for legacy schema upgrades.
+  /// Binding that carries a [HiveCeMigrator] for codec upgrades.
   final HiveCeBinding<RepositoryProfile> migratorBinding;
+
+  /// Profile read through the old-codec migration and maintenance path.
+  final RepositoryProfile migratedProfile;
 
   /// Store backed by an encrypted Hive box (cipher owned by the caller).
   final HiveCeKacheStore encryptedStore;
@@ -228,11 +256,32 @@ Future<void> _closePersistenceResources(
   }
 }
 
-/// Migrates a legacy schema-0 payload (snake_case GitHub JSON) into the current
-/// [repositoryProfileCodec] shape. This is the callback passed to `bind()`.
-RepositoryProfile _migrateFromLegacy(Uint8List payload, int fromSchema) {
-  if (fromSchema != 0) {
-    return repositoryProfileCodec.decode(payload);
+final HiveCeCodec<RepositoryProfile> _legacyRepositoryProfileCodec =
+    HiveCeCodec<RepositoryProfile>(
+      encode: (profile) => Uint8List.fromList(
+        utf8.encode(
+          jsonEncode(<String, Object?>{
+            'full_name': profile.fullName,
+            'description': profile.description,
+            'html_url': profile.htmlUrl,
+            'owner': <String, Object?>{'avatar_url': profile.ownerAvatarUrl},
+            'stargazers_count': profile.stars,
+            'forks_count': profile.forks,
+            'open_issues_count': profile.openIssues,
+            'language': profile.language,
+            'updated_at': profile.updatedAt.toUtc().toIso8601String(),
+          }),
+        ),
+      ),
+      decode: (payload) =>
+          _migrateFromLegacy(payload, 'github-repository-profile-json-v0'),
+    );
+
+/// Migrates a payload written under the legacy snake_case JSON codec into the
+/// current [repositoryProfileCodec] shape. This is passed to `bind()`.
+RepositoryProfile _migrateFromLegacy(Uint8List payload, String fromCodecId) {
+  if (fromCodecId != 'github-repository-profile-json-v0') {
+    throw FormatException('Unsupported repository codec: $fromCodecId');
   }
   try {
     final decoded = jsonDecode(utf8.decode(payload));

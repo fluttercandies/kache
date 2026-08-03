@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache dependency to `^3.0.0`; Bloc and Cubit state
+  ownership behavior is unchanged.
+
 ## 2.0.1
 
 - Made Cubit close idempotent during synchronous Bloc observer callbacks.

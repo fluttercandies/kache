@@ -11,6 +11,9 @@ abstract interface class PersistenceContractHarness {
   /// Creates a binding owned by [backend].
   KachePersistenceBinding<T> bind<T>({required String fingerprint});
 
+  /// Stage used when a stored fingerprint cannot be read by a new binding.
+  KachePersistenceStage get fingerprintMismatchStage;
+
   /// Releases backend and test resources after a contract scenario.
   FutureOr<void> dispose();
 }
@@ -235,29 +238,43 @@ void runPersistenceContract({
       );
     });
 
+    test('classifies a fingerprint mismatch on read', () async {
+      final harness = await _createHarness(createHarness);
+      final key = KacheKey('fingerprint-mismatch-read');
+      final original = harness.bind<String>(fingerprint: 'string-v1');
+      await _writeString(harness, key, original, 'value');
+      final mismatched = harness.bind<String>(fingerprint: 'string-v2');
+
+      final error = await _capturePersistenceFailure(
+        () => harness.backend.read<String>(key: key, binding: mismatched),
+      );
+
+      expect(error.operation, KachePersistenceOperation.read);
+      expect(error.stage, harness.fingerprintMismatchStage);
+      expect(error.cause, isNotNull);
+      expect(error.stackTrace.toString(), isNotEmpty);
+    });
+
+    test('a new fingerprint authoritatively replaces an entry', () async {
+      final harness = await _createHarness(createHarness);
+      final key = KacheKey('fingerprint-mismatch-write');
+      final original = harness.bind<String>(fingerprint: 'string-v1');
+      final replacement = harness.bind<String>(fingerprint: 'string-v2');
+      await _writeString(harness, key, original, 'value');
+
+      await _writeString(harness, key, replacement, 'replacement');
+      final read = await harness.backend.read<String>(
+        key: key,
+        binding: replacement,
+      );
+
+      expect(read?.entry.data, 'replacement');
+    });
+
     for (final operation in [
       KachePersistenceOperation.read,
       KachePersistenceOperation.write,
     ]) {
-      test('classifies $operation fingerprint mismatch', () async {
-        final harness = await _createHarness(createHarness);
-        final key = KacheKey('fingerprint-mismatch');
-        final original = harness.bind<String>(fingerprint: 'string-v1');
-        await _writeString(harness, key, original, 'value');
-        final mismatched = harness.bind<String>(fingerprint: 'string-v2');
-
-        final error = operation == KachePersistenceOperation.read
-            ? await _capturePersistenceFailure(
-                () =>
-                    harness.backend.read<String>(key: key, binding: mismatched),
-              )
-            : await _capturePersistenceFailure(
-                () => _writeString(harness, key, mismatched, 'replacement'),
-              );
-
-        _expectBackendFailure(error, operation);
-      });
-
       test('classifies $operation reified type mismatch', () async {
         final harness = await _createHarness(createHarness);
         final key = KacheKey('type-mismatch');

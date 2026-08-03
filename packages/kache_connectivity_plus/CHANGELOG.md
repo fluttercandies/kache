@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache dependency to `^3.0.0`; connectivity recovery
+  and lifecycle behavior is unchanged.
+
 ## 2.0.1
 
 - Made close independent of paused or reentrant state subscribers and stalled

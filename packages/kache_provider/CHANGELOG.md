@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache Flutter dependency to `^3.0.0`; Provider
+  controller and consumer behavior is unchanged.
+
 ## 2.0.1
 
 - Made client replacement transactional so a failed controller construction

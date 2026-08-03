@@ -1,3 +1,8 @@
+## 3.0.0
+
+- Updated the re-exported Kache dependency to `^3.0.0` for the persistence
+  contract cutover; Flutter controller and widget behavior is unchanged.
+
 ## 2.0.1
 
 - Made different-key query and client replacements transactional, preserving

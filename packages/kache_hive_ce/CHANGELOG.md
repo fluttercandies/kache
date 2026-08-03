@@ -1,3 +1,13 @@
+## 3.0.0
+
+- Removed the duplicate integer schema API. `codecId` is now the sole byte
+  format identity, and `HiveCeMigrator` receives the stored codec identifier.
+- Added race-safe lazy codec migration that never hides migrated data or
+  overwrites a newer record.
+- Removed reads, rewrites, and clears for retired canonical keys, v2 hashed
+  keys, and v1 byte envelopes. Current managed keys use the strict v3 grammar.
+- Updated the Kache dependency to `^3.0.0`.
+
 ## 2.1.0
 
 - Added `HiveCeKeyStrategy` with domain-separated SHA-256 (default) and

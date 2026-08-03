@@ -14,10 +14,10 @@ dependencies:
     sdk: flutter
   hive_ce_flutter: 2.3.4
   http: 1.6.0
-  kache: ^2.0.0
-  kache_connectivity_plus: ^2.0.0
-  kache_flutter: ^2.0.0
-  kache_hive_ce: ^2.0.0
+  kache: ^3.0.0
+  kache_connectivity_plus: ^3.0.0
+  kache_flutter: ^3.0.0
+  kache_hive_ce: ^3.0.0
 
 dev_dependencies:
   flutter_test:

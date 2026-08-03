@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:hive_ce/hive_ce.dart';
 import 'package:kache/kache.dart';
 import 'package:kache_hive_ce/kache_hive_ce.dart';
 import 'package:kache_hive_ce/src/adapter_envelope.dart';
-import 'package:kache_hive_ce/src/envelope.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -185,10 +185,19 @@ void main() {
       ownership: HiveCeBoxOwnership.owned,
     );
     final key = KacheKey('corrupt');
-    await box.put(key.storageKey, 'not-bytes');
+    final binding = _stringBinding(store);
+    await store.write<String>(
+      key: key,
+      binding: binding,
+      entry: KachePersistedEntry<String>(
+        data: 'valid',
+        metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+      ),
+    );
+    await box.put(_findFirstPhysicalKey(box), 'not-bytes');
 
     await expectLater(
-      store.read<String>(key: key, binding: _stringBinding(store)),
+      store.read<String>(key: key, binding: binding),
       throwsA(
         isA<KachePersistenceException>()
             .having(
@@ -487,12 +496,24 @@ void main() {
         bytes: Uint8List(0),
       );
       final key = KacheKey('adapter-corrupt');
-      await store.box.put(key.storageKey, <Object?>['invalid']);
+      final binding = store.bindAdapter<_Profile>(const _ProfileAdapter());
+      await store.write<_Profile>(
+        key: key,
+        binding: binding,
+        entry: KachePersistedEntry<_Profile>(
+          data: const _Profile(1, 'valid'),
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      await store.box.put(
+        _findFirstPhysicalKey(store.box),
+        <Object?>['invalid'],
+      );
 
       await expectLater(
         store.read<_Profile>(
           key: key,
-          binding: store.bindAdapter<_Profile>(const _ProfileAdapter()),
+          binding: binding,
         ),
         throwsA(
           isA<KachePersistenceException>().having(
@@ -503,98 +524,6 @@ void main() {
         ),
       );
       await store.close();
-    });
-
-    test(
-      'legacy adapter key migration never overwrites a replaced legacy value',
-      () async {
-        final store = await HiveCeKacheStore.open(
-          boxName: _boxName('adapter-legacy-race'),
-          bytes: Uint8List(0),
-        );
-        final binding = store.bindAdapter<_Profile>(const _ProfileAdapter());
-        final key = KacheKey('adapter-legacy');
-        final legacyRecord = HiveCeAdapterEnvelope.encode(
-          fetchedAt: DateTime.utc(2026),
-          isInvalidated: false,
-          typeId: _ProfileAdapter.typeIdValue,
-          data: const _Profile(1, 'original'),
-        );
-        await store.box.put(key.storageKey, legacyRecord);
-
-        final read = await store.read<_Profile>(key: key, binding: binding);
-        expect(read?.entry.data, const _Profile(1, 'original'));
-        expect(read?.hasMaintenance, isTrue);
-
-        final updatedRecord = HiveCeAdapterEnvelope.encode(
-          fetchedAt: DateTime.utc(2026, 2),
-          isInvalidated: false,
-          typeId: _ProfileAdapter.typeIdValue,
-          data: const _Profile(2, 'updated'),
-        );
-        await store.box.put(key.storageKey, updatedRecord);
-
-        await read?.runMaintenance();
-
-        expect(store.box.get(key.storageKey), isNotNull);
-        expect(
-          store.box.keys
-              .whereType<String>()
-              .where((boxKey) => boxKey.startsWith('kache:2:')),
-          isEmpty,
-        );
-
-        final read2 = await store.read<_Profile>(key: key, binding: binding);
-        expect(read2?.entry.data, const _Profile(2, 'updated'));
-        await store.close();
-      },
-    );
-    test('adapter maintenance cannot mutate a borrowed box after close',
-        () async {
-      final boxName = _boxName('adapter-maintenance-after-close');
-      final box = await Hive.openBox<Object?>(boxName, bytes: Uint8List(0));
-      final store = HiveCeKacheStore.fromBox(box);
-      final binding = store.bindAdapter<_Profile>(const _ProfileAdapter());
-      final key = KacheKey('adapter-maintenance-after-close');
-      await box.put(
-        key.storageKey,
-        HiveCeAdapterEnvelope.encode(
-          fetchedAt: DateTime.utc(2026),
-          isInvalidated: false,
-          typeId: _ProfileAdapter.typeIdValue,
-          data: const _Profile(1, 'before-close'),
-        ),
-      );
-
-      final read = await store.read<_Profile>(key: key, binding: binding);
-      expect(read?.hasMaintenance, isTrue);
-      await store.close();
-      expect(box.isOpen, isTrue);
-
-      await expectLater(
-        read?.runMaintenance(),
-        throwsA(
-          isA<KachePersistenceException>()
-              .having(
-                (error) => error.operation,
-                'operation',
-                KachePersistenceOperation.read,
-              )
-              .having(
-                (error) => error.stage,
-                'stage',
-                KachePersistenceStage.migration,
-              ),
-        ),
-      );
-      expect(box.get(key.storageKey), isNotNull);
-      expect(
-        box.keys
-            .whereType<String>()
-            .where((value) => value.startsWith('kache:2:')),
-        isEmpty,
-      );
-      await box.close();
     });
   });
 
@@ -668,8 +597,8 @@ void main() {
 
       final shaPhysical = _findFirstPhysicalKey(shaStore.box);
       final hmacPhysical = _findFirstPhysicalKey(hmacStore.box);
-      expect(shaPhysical.startsWith('kache:2:s:'), isTrue);
-      expect(hmacPhysical.startsWith('kache:2:h:'), isTrue);
+      expect(shaPhysical.startsWith('kache:3:s:'), isTrue);
+      expect(hmacPhysical.startsWith('kache:3:h:'), isTrue);
       expect(shaPhysical, isNot(equals(hmacPhysical)));
 
       await shaStore.close();
@@ -706,43 +635,35 @@ void main() {
       );
     });
 
-    test(
-      'legacy canonical key migrates to hashed key on read',
-      () async {
-        final store = await HiveCeKacheStore.open(
-          boxName: _boxName('legacy-migrate'),
-          bytes: Uint8List(0),
-        );
-        final key = KacheKey('profile');
-        final binding = _stringBinding(store);
-        final legacyRecord = HiveCeEnvelope.encode(
-          fetchedAt: DateTime.utc(2026),
-          isInvalidated: false,
-          schema: 1,
-          codecId: 'utf8-string',
-          payload: Uint8List.fromList(utf8.encode('legacy-data')),
-        );
-        await store.box.put(key.storageKey, legacyRecord);
+    test('does not read or clear records from removed key formats', () async {
+      final store = await HiveCeKacheStore.open(
+        boxName: _boxName('removed-key-formats'),
+        bytes: Uint8List(0),
+      );
+      final key = KacheKey('profile');
+      final binding = _stringBinding(store);
+      await store.write<String>(
+        key: key,
+        binding: binding,
+        entry: KachePersistedEntry<String>(
+          data: 'current',
+          metadata: KachePersistedMetadata(fetchedAt: DateTime.utc(2026)),
+        ),
+      );
+      final currentKey = _findFirstPhysicalKey(store.box);
+      final record = store.box.get(currentKey)!;
+      final oldHashedKey = _retiredV2PhysicalKey(key);
+      await store.box.delete(currentKey);
+      await store.box.put(oldHashedKey, record);
+      await store.box.put(key.storageKey, record);
 
-        final read = await store.read<String>(key: key, binding: binding);
-        expect(read?.entry.data, 'legacy-data');
-        expect(read?.hasMaintenance, isTrue);
+      expect(await store.read<String>(key: key, binding: binding), isNull);
+      await store.clear();
+      expect(store.box.get(oldHashedKey), same(record));
+      expect(store.box.get(key.storageKey), same(record));
 
-        await read?.runMaintenance();
-
-        expect(store.box.get(key.storageKey), isNull);
-        expect(
-          store.box.keys.whereType<String>().where(_isManagedKey).length,
-          1,
-        );
-
-        final read2 = await store.read<String>(key: key, binding: binding);
-        expect(read2?.entry.data, 'legacy-data');
-        expect(read2?.hasMaintenance, isFalse);
-
-        await store.close();
-      },
-    );
+      await store.close();
+    });
 
     test('clear preserves non-kache and pseudo-prefix host data', () async {
       final box = await Hive.openBox<Object?>(
@@ -766,6 +687,10 @@ void main() {
       await box.put('foreign-key', 'foreign-data');
       await box.put('kache:2:evil', 'pseudo-prefix-1');
       await box.put('kache:2:s:short', 'pseudo-prefix-2');
+      final retiredKey = 'kache:2:s:${'a' * 43}:${'b' * 43}';
+      final retiredCanonicalKey = KacheKey('retired', [1]).storageKey;
+      await box.put(retiredKey, 'retired-v2');
+      await box.put(retiredCanonicalKey, 'retired-canonical');
       await box.put(
         'kache:2:s:${'a' * 43}:${'b' * 10}',
         'pseudo-prefix-short-suffix',
@@ -787,6 +712,8 @@ void main() {
         box.get('kache:2:s:${'a' * 43}:${'b' * 10}'),
         'pseudo-prefix-short-suffix',
       );
+      expect(box.get(retiredKey), 'retired-v2');
+      expect(box.get(retiredCanonicalKey), 'retired-canonical');
       expect(box.get('k1fake-key'), 'pseudo-prefix-3');
       expect(box.get('k1:'), 'pseudo-prefix-empty-ns');
       await store.close();
@@ -1182,7 +1109,6 @@ void main() {
 
 HiveCeBinding<String> _stringBinding(HiveCeKacheStore store) => store.bind(
       codecId: 'utf8-string',
-      schema: 1,
       codec: HiveCeCodec<String>(
         encode: (value) => Uint8List.fromList(utf8.encode(value)),
         decode: (bytes) => utf8.decode(bytes),
@@ -1190,13 +1116,18 @@ HiveCeBinding<String> _stringBinding(HiveCeKacheStore store) => store.bind(
     );
 
 String _findFirstPhysicalKey(Box<Object?> box) =>
-    box.keys.whereType<String>().firstWhere((k) => k.startsWith('kache:2:'));
+    box.keys.whereType<String>().firstWhere((k) => k.startsWith('kache:3:'));
 
-final _testManagedKeyPattern = RegExp(
-  r'^(kache:2:[sh]:[A-Za-z0-9_-]{43}:[A-Za-z0-9_-]{43}|k1:[A-Za-z0-9_-]+:[A-Za-z0-9_-]*)$',
-);
+String _retiredV2PhysicalKey(KacheKey key) {
+  String digest(String domain, String value) => base64Url
+      .encode(sha256.convert(utf8.encode('$domain\x00$value')).bytes)
+      .replaceAll('=', '');
 
-bool _isManagedKey(String key) => _testManagedKeyPattern.hasMatch(key);
+  final namespace = KacheNamespace(key.namespace);
+  return 'kache:2:s:'
+      '${digest('kache-hive-ce:v2:namespace', namespace.storagePrefix)}:'
+      '${digest('kache-hive-ce:v2:key', key.storageKey)}';
+}
 
 String _boxName(String label) =>
     'kache_${label}_${DateTime.now().microsecondsSinceEpoch}';
