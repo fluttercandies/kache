@@ -36,6 +36,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter ${{ matrix.flutter }}
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
@@ -44,7 +46,9 @@ jobs:
           cache: true
 
       - name: Verify package minimum
-        run: bash tool/verify_minimum_sdk.sh ${{ matrix.profile }}
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: bash tool/verify_minimum_sdk.sh "$PROFILE"
 
   quality:
     name: Quality and publication readiness
@@ -55,6 +59,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
