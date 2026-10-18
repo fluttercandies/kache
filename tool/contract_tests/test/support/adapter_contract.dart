@@ -152,6 +152,53 @@ void runAdapterContract(List<AdapterHarnessFactory> factories) {
         }
       });
 
+      testWidgets('concurrent command results never roll state back', (
+        tester,
+      ) async {
+        var fetchCount = 0;
+        final backend = MemoryKachePersistence();
+        final client = KacheClient(persistence: backend);
+        final harness = await factory.create(
+          tester,
+          client,
+          KacheQuery.persisted(
+            key: KacheKey('adapter-contract', <Object?>['concurrent']),
+            binding: backend.bind<int>(fingerprint: 'adapter-concurrent-v1'),
+            fetch: (context) async => ++fetchCount,
+          ),
+        );
+
+        try {
+          await harness.settle();
+          final observed = <int>[harness.snapshot.revision];
+          final first = harness.refresh();
+          final second = harness.invalidate(refetch: true);
+          final third = harness.refresh();
+          for (final command in <Future<KacheSnapshot<int>>>[
+            first,
+            second,
+            third,
+          ]) {
+            await command;
+            observed.add(harness.snapshot.revision);
+          }
+          await harness.settle();
+          observed.add(harness.snapshot.revision);
+
+          for (var index = 1; index < observed.length; index++) {
+            expect(
+              observed[index],
+              greaterThanOrEqualTo(observed[index - 1]),
+              reason: 'observed revisions $observed',
+            );
+          }
+          expect(harness.snapshot.requireData, fetchCount);
+        } finally {
+          await harness.dispose();
+          await client.close();
+        }
+      });
+
       testWidgets('forces a refresh through the adapter command', (
         tester,
       ) async {

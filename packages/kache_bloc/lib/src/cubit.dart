@@ -97,7 +97,10 @@ class KacheCubit<T> extends Cubit<KacheSnapshot<T>> {
   }
 
   void _accept(KacheSnapshot<T> snapshot) {
-    if (_isClosing || isClosed || identical(state, snapshot)) {
+    // Revisions increase strictly within one resource. A command result can
+    // resolve after newer stream updates were emitted; it must not roll the
+    // state back.
+    if (_isClosing || isClosed || snapshot.revision <= state.revision) {
       return;
     }
     emit(snapshot);

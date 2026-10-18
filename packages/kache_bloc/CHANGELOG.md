@@ -1,3 +1,8 @@
+## 3.1.1
+
+- Fixed `KacheCubit` emitting older snapshots when concurrent commands resolved
+  after newer resource updates; state revisions are now strictly increasing.
+
 ## 3.1.0
 
 - Updated the re-exported Kache dependency to `^3.1.0`; Bloc and Cubit state
