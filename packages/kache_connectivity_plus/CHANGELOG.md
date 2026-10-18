@@ -1,3 +1,19 @@
+## 3.1.1
+
+- Checks connectivity again whenever the app resumes, so a recovery missed
+  while platforms drop background events (connectivity_plus on iOS) still
+  produces the `unavailable -> available` transition. A change event that
+  arrives during the check wins over its result.
+- Added the optional `binding` constructor parameter to enable resume checks
+  with an injected `Connectivity`.
+- Only a result made entirely of `ConnectivityResult.none` maps to
+  `unavailable`; mixed results now map to `available`.
+- A subscriber that arrives after a failed check with no known state triggers
+  a new check instead of receiving nothing.
+- Paused subscribers resume with only the newest state instead of replaying
+  buffered history, and streams returned after `close()` are broadcast like
+  live streams.
+
 ## 3.1.0
 
 - Updated the re-exported Kache dependency to `^3.1.0`; connectivity recovery

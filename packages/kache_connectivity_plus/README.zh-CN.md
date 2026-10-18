@@ -39,10 +39,12 @@ KacheClient createClient() {
 ## 状态语义
 
 适配器先订阅变化，再执行首次检查，因此较新的平台事件不会被迟到的检查结果覆盖。
-每个订阅者先收到当前规范化状态，之后只收到不同状态。`ConnectivityResult.none`
-映射为 `unavailable`，其他非空结果集合映射为 `available`。
+每个订阅者先收到当前规范化状态，之后只收到不同状态；暂停的订阅者恢复时只收到
+最新状态。仅由 `ConnectivityResult.none` 组成的结果映射为 `unavailable`，其他
+非空结果集合映射为 `available`。
 
-首次检查失败、stream 失败、非法空结果和 stream 意外结束都保持可观测。
+首次检查失败、stream 失败、非法空结果和 stream 意外结束都保持可观测。检查失败
+且尚无已知状态时，下一个订阅者会重新发起检查，而不是静默等待。
 `KacheClient` 会把来源失败报告为 `KacheFailureKind.connectivity` 事件，但不会清除
 缓存快照。
 
@@ -78,8 +80,13 @@ final class AppNetwork implements KacheNetwork {
 ## Flutter 生命周期
 
 把 client 放入 `KacheScope`。应用处于 inactive、hidden、paused 或 detached 时，
-scope 会暂停 reconnect 重验；恢复前台后只消费一次待处理恢复。网络状态观察不会
-暂停，因此后台期间的恢复信号不会丢失。
+scope 会暂停 reconnect 重验；恢复前台后只消费一次待处理恢复。网络状态观察在后台
+持续进行。
+
+部分平台会在后台丢弃连接事件（connectivity_plus 在 iOS 后台不发送事件），因此
+适配器在每次应用回到前台时重新检查连接状态。检查进行期间到达的变化事件优先于
+检查结果，结果未变化时不发出任何状态。默认适配器观察 `WidgetsBinding.instance`；
+测试中注入 `connectivity:` 时，同时传入 `binding:` 即可启用回前台检查。
 
 ## 兼容性
 

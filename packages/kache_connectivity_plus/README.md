@@ -43,12 +43,15 @@ KacheClient createClient() {
 The adapter subscribes to connectivity changes before running the initial
 check, so a newer platform event cannot be overwritten by a late check. Each
 subscriber receives the latest normalized state first, followed by distinct
-changes. `ConnectivityResult.none` maps to `unavailable`; other non-empty
-result sets map to `available`.
+changes; a paused subscriber resumes with only the newest state. A result made
+only of `ConnectivityResult.none` maps to `unavailable`; any other non-empty
+result set maps to `available`.
 
 Check failures, stream failures, malformed empty results, and unexpected
-stream completion remain observable. `KacheClient` reports source failures as
-`KacheFailureKind.connectivity` events without clearing cached snapshots.
+stream completion remain observable. When a check failed and no state is known
+yet, the next subscriber triggers a fresh check instead of waiting silently.
+`KacheClient` reports source failures as `KacheFailureKind.connectivity` events
+without clearing cached snapshots.
 
 ## Ownership
 
@@ -85,8 +88,14 @@ Pass an `AppNetwork` as borrowed when its host owns `_close`, or owned when the
 
 Place the client in `KacheScope`. The scope pauses reconnect revalidation while
 the app is inactive, hidden, paused, or detached, then consumes one pending
-reconnect after resume. Network observation stays active so recovery is not
-lost while the UI is in the background.
+reconnect after resume. Network observation stays active in the background.
+
+Platforms can drop connectivity events in the background (connectivity_plus
+skips them on iOS), so the adapter checks connectivity again every time the
+app resumes. A change event that arrives while that check is pending wins over
+the check result, and an unchanged result emits nothing. The default adapter
+observes `WidgetsBinding.instance`; pass `binding:` together with an injected
+`connectivity:` to enable resume checks in tests.
 
 ## Compatibility
 

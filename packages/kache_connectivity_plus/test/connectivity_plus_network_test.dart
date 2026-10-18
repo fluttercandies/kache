@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kache_connectivity_plus/kache_connectivity_plus.dart';
 
@@ -191,7 +192,7 @@ void main() {
     final source = _StalledCancelConnectivity();
     final network = ConnectivityPlusNetwork(connectivity: source);
     final subscription = network.states.listen((_) {});
-    source.checked;
+    await source.checked.future;
 
     await network.close().timeout(const Duration(seconds: 1));
 
@@ -236,6 +237,334 @@ void main() {
     expect(source.cancelCount, 1);
     await subscription.cancel();
   });
+
+  test('only an all-none result maps to unavailable', () async {
+    final source = _FakeConnectivity(
+      initial: <ConnectivityResult>[ConnectivityResult.none],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final states = <KacheNetworkState>[];
+    final subscription = network.states.listen(states.add);
+    await source.checked;
+    await pumpEventQueue();
+
+    source.emit(<ConnectivityResult>[
+      ConnectivityResult.wifi,
+      ConnectivityResult.none,
+    ]);
+    source.emit(<ConnectivityResult>[
+      ConnectivityResult.none,
+      ConnectivityResult.none,
+    ]);
+    await pumpEventQueue();
+
+    expect(states, <KacheNetworkState>[
+      KacheNetworkState.unavailable,
+      KacheNetworkState.available,
+      KacheNetworkState.unavailable,
+    ]);
+    await subscription.cancel();
+    await network.close();
+  });
+
+  test('a flapping storm emits only strict alternations', () async {
+    final source = _FakeConnectivity(
+      initial: <ConnectivityResult>[ConnectivityResult.wifi],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final states = <KacheNetworkState>[];
+    final subscription = network.states.listen(states.add);
+    await source.checked;
+    await pumpEventQueue();
+
+    const interfaces = <ConnectivityResult>[
+      ConnectivityResult.wifi,
+      ConnectivityResult.mobile,
+      ConnectivityResult.vpn,
+    ];
+    for (var index = 0; index < 300; index++) {
+      source.emit(<ConnectivityResult>[interfaces[index % 3]]);
+      if (index % 3 == 2) {
+        source.emit(<ConnectivityResult>[ConnectivityResult.none]);
+        source.emit(<ConnectivityResult>[ConnectivityResult.none]);
+      }
+    }
+    await pumpEventQueue();
+
+    // The first cycle starts on the already-available state.
+    expect(states, hasLength(200));
+    for (var index = 0; index < states.length; index++) {
+      expect(
+        states[index],
+        index.isEven
+            ? KacheNetworkState.available
+            : KacheNetworkState.unavailable,
+      );
+    }
+    await subscription.cancel();
+    await network.close();
+  });
+
+  test('a subscriber after a failed check retries and receives state',
+      () async {
+    final source = _FakeConnectivity(
+      initialError: StateError('check failed'),
+      onCheck: () async => <ConnectivityResult>[ConnectivityResult.mobile],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final firstErrors = <Object>[];
+    final first = network.states.listen((_) {}, onError: firstErrors.add);
+    await source.checked;
+    await pumpEventQueue();
+    expect(firstErrors, hasLength(1));
+
+    final late = await network.states.first.timeout(
+      const Duration(seconds: 1),
+    );
+
+    expect(late, KacheNetworkState.available);
+    expect(source.checkCount, 2);
+    await first.cancel();
+    await network.close();
+  });
+
+  test('a paused subscriber resumes with only the latest state', () async {
+    final source = _FakeConnectivity(
+      initial: <ConnectivityResult>[ConnectivityResult.wifi],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final states = <KacheNetworkState>[];
+    final subscription = network.states.listen(states.add);
+    await source.checked;
+    await pumpEventQueue();
+
+    subscription.pause();
+    source.emit(<ConnectivityResult>[ConnectivityResult.none]);
+    source.emit(<ConnectivityResult>[ConnectivityResult.wifi]);
+    source.emit(<ConnectivityResult>[ConnectivityResult.none]);
+    await pumpEventQueue();
+    subscription.resume();
+    await pumpEventQueue();
+
+    expect(states, <KacheNetworkState>[
+      KacheNetworkState.available,
+      KacheNetworkState.unavailable,
+    ]);
+    await subscription.cancel();
+    await network.close();
+  });
+
+  test('a paused subscriber skips a round trip back to its state', () async {
+    final source = _FakeConnectivity(
+      initial: <ConnectivityResult>[ConnectivityResult.wifi],
+    );
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final states = <KacheNetworkState>[];
+    final subscription = network.states.listen(states.add);
+    await source.checked;
+    await pumpEventQueue();
+
+    subscription.pause();
+    source.emit(<ConnectivityResult>[ConnectivityResult.none]);
+    source.emit(<ConnectivityResult>[ConnectivityResult.wifi]);
+    await pumpEventQueue();
+    subscription.resume();
+    await pumpEventQueue();
+
+    expect(states, <KacheNetworkState>[KacheNetworkState.available]);
+    await subscription.cancel();
+    await network.close();
+  });
+
+  test('source completion before the initial check waits for it', () async {
+    final initial = Completer<List<ConnectivityResult>>();
+    final source = _FakeConnectivity(initialFuture: initial.future);
+    final network = ConnectivityPlusNetwork(connectivity: source);
+    final states = network.states.toList();
+    await source.checked;
+
+    await source.end();
+    initial.complete(<ConnectivityResult>[ConnectivityResult.ethernet]);
+
+    expect(await states, <KacheNetworkState>[KacheNetworkState.available]);
+    await network.close();
+  });
+
+  test('a synchronous listen failure is reported and still checks', () async {
+    final network = ConnectivityPlusNetwork(
+      connectivity: _ThrowingListenConnectivity(),
+    );
+    final errors = <Object>[];
+    final states = <KacheNetworkState>[];
+    final done = Completer<void>();
+    network.states.listen(
+      states.add,
+      onError: errors.add,
+      onDone: done.complete,
+    );
+
+    await done.future.timeout(const Duration(seconds: 1));
+
+    expect(errors.single, isA<UnsupportedError>());
+    expect(states, <KacheNetworkState>[KacheNetworkState.unavailable]);
+    await network.close();
+  });
+
+  test('streams after close are broadcast like live streams', () async {
+    final network = ConnectivityPlusNetwork(connectivity: _FakeConnectivity());
+    expect(network.states.isBroadcast, isTrue);
+    await network.close();
+    expect(network.states.isBroadcast, isTrue);
+  });
+
+  group('app resume', () {
+    late TestWidgetsFlutterBinding binding;
+
+    setUp(() {
+      binding = TestWidgetsFlutterBinding.ensureInitialized();
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    });
+
+    void background() {
+      binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    }
+
+    void foreground() {
+      binding
+        ..handleAppLifecycleStateChanged(AppLifecycleState.hidden)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.inactive)
+        ..handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    }
+
+    test('re-checks and recovers a change missed in the background', () async {
+      var current = <ConnectivityResult>[ConnectivityResult.none];
+      final source = _FakeConnectivity(
+        initial: current,
+        onCheck: () async => current,
+      );
+      final network = ConnectivityPlusNetwork(
+        connectivity: source,
+        binding: binding,
+      );
+      final states = <KacheNetworkState>[];
+      final subscription = network.states.listen(states.add);
+      await source.checked;
+      await pumpEventQueue();
+
+      background();
+      current = <ConnectivityResult>[ConnectivityResult.wifi];
+      foreground();
+      await pumpEventQueue();
+
+      expect(source.checkCount, 2);
+      expect(states, <KacheNetworkState>[
+        KacheNetworkState.unavailable,
+        KacheNetworkState.available,
+      ]);
+      await subscription.cancel();
+      await network.close();
+    });
+
+    test('a change during the resume check wins over its result', () async {
+      final resumeCheck = Completer<List<ConnectivityResult>>();
+      final source = _FakeConnectivity(
+        initial: <ConnectivityResult>[ConnectivityResult.wifi],
+        onCheck: () => resumeCheck.future,
+      );
+      final network = ConnectivityPlusNetwork(
+        connectivity: source,
+        binding: binding,
+      );
+      final states = <KacheNetworkState>[];
+      final subscription = network.states.listen(states.add);
+      await source.checked;
+      await pumpEventQueue();
+
+      background();
+      foreground();
+      source.emit(<ConnectivityResult>[ConnectivityResult.none]);
+      resumeCheck.complete(<ConnectivityResult>[ConnectivityResult.wifi]);
+      await pumpEventQueue();
+
+      expect(states, <KacheNetworkState>[
+        KacheNetworkState.available,
+        KacheNetworkState.unavailable,
+      ]);
+      await subscription.cancel();
+      await network.close();
+    });
+
+    test('an unchanged resume check emits nothing', () async {
+      final source = _FakeConnectivity(
+        initial: <ConnectivityResult>[ConnectivityResult.wifi],
+      );
+      final network = ConnectivityPlusNetwork(
+        connectivity: source,
+        binding: binding,
+      );
+      final states = <KacheNetworkState>[];
+      final subscription = network.states.listen(states.add);
+      await source.checked;
+      await pumpEventQueue();
+
+      background();
+      foreground();
+      await pumpEventQueue();
+
+      expect(source.checkCount, 2);
+      expect(states, <KacheNetworkState>[KacheNetworkState.available]);
+      await subscription.cancel();
+      await network.close();
+    });
+
+    test('close stops resume checks', () async {
+      final source = _FakeConnectivity(
+        initial: <ConnectivityResult>[ConnectivityResult.wifi],
+      );
+      final network = ConnectivityPlusNetwork(
+        connectivity: source,
+        binding: binding,
+      );
+      await network.states.first;
+      await network.close();
+
+      background();
+      foreground();
+      await pumpEventQueue();
+
+      expect(source.checkCount, 1);
+    });
+
+    test('an injected source without a binding never observes it', () async {
+      final source = _FakeConnectivity(
+        initial: <ConnectivityResult>[ConnectivityResult.wifi],
+      );
+      final network = ConnectivityPlusNetwork(connectivity: source);
+      final subscription = network.states.listen((_) {});
+      await source.checked;
+
+      background();
+      foreground();
+      await pumpEventQueue();
+
+      expect(source.checkCount, 1);
+      await subscription.cancel();
+      await network.close();
+    });
+  });
+}
+
+final class _ThrowingListenConnectivity implements Connectivity {
+  @override
+  Future<List<ConnectivityResult>> checkConnectivity() async =>
+      const <ConnectivityResult>[ConnectivityResult.none];
+
+  @override
+  Stream<List<ConnectivityResult>> get onConnectivityChanged =>
+      throw UnsupportedError('no event channel');
 }
 
 final class _FakeConnectivity implements Connectivity {
@@ -243,15 +572,21 @@ final class _FakeConnectivity implements Connectivity {
     List<ConnectivityResult>? initial,
     Future<List<ConnectivityResult>>? initialFuture,
     Object? initialError,
+    this.onCheck,
   }) : _initial = initialFuture ??
             (initialError == null
                 ? Future<List<ConnectivityResult>>.value(
                     initial ??
                         const <ConnectivityResult>[ConnectivityResult.none],
                   )
-                : Future<List<ConnectivityResult>>.error(initialError));
+                : Future<List<ConnectivityResult>>.error(initialError)) {
+    _initial.ignore();
+  }
 
   final Future<List<ConnectivityResult>> _initial;
+
+  /// Answers every check after the first one; defaults to the initial answer.
+  Future<List<ConnectivityResult>> Function()? onCheck;
   late final StreamController<List<ConnectivityResult>> _changes =
       StreamController<List<ConnectivityResult>>.broadcast(
     sync: true,
@@ -268,8 +603,10 @@ final class _FakeConnectivity implements Connectivity {
     checkCount += 1;
     if (!_checked.isCompleted) {
       _checked.complete();
+      return _initial;
     }
-    return _initial;
+    final answer = onCheck;
+    return answer == null ? _initial : answer();
   }
 
   @override

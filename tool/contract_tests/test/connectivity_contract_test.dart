@@ -40,11 +40,46 @@ void main() {
     await client.close();
     await connectivity.close();
   });
+
+  test('a borrowed adapter outlives clients and serves the next one', () async {
+    final connectivity = _FakeConnectivity();
+    final network = ConnectivityPlusNetwork(connectivity: connectivity);
+    addTearDown(connectivity.close);
+    final first = KacheClient(network: network);
+    await pumpEventQueue();
+    expect(first.networkState, KacheNetworkState.unavailable);
+
+    await first.close();
+    expect(connectivity.cancelCount, 0);
+
+    connectivity.emit(<ConnectivityResult>[ConnectivityResult.wifi]);
+    final second = KacheClient(network: network);
+    await pumpEventQueue();
+    expect(second.networkState, KacheNetworkState.available);
+
+    final failures = <KacheEvent>[];
+    final events = second.events.listen((event) {
+      if (event.phase == KacheEventPhase.failed) {
+        failures.add(event);
+      }
+    });
+    await network.close();
+    await pumpEventQueue();
+
+    expect(connectivity.cancelCount, 1);
+    expect(failures.single.failure?.kind, KacheFailureKind.connectivity);
+    await events.cancel();
+    await second.close();
+  });
 }
 
 final class _FakeConnectivity implements Connectivity {
-  final StreamController<List<ConnectivityResult>> _changes =
-      StreamController<List<ConnectivityResult>>.broadcast(sync: true);
+  late final StreamController<List<ConnectivityResult>> _changes =
+      StreamController<List<ConnectivityResult>>.broadcast(
+        sync: true,
+        onCancel: () => cancelCount += 1,
+      );
+  int cancelCount = 0;
 
   @override
   Future<List<ConnectivityResult>> checkConnectivity() async =>
