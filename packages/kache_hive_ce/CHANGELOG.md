@@ -1,3 +1,9 @@
+## 3.1.1
+
+- Published READMEs now load the Kache logo from an absolute URL, because
+  pub.dev does not render relative README images, and add pub, CI, and license
+  badges.
+
 ## 3.1.0
 
 - Added `isolateThreshold` to `HiveCeKacheStore.open` and `fromBox`

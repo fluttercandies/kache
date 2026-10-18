@@ -4,6 +4,9 @@
   <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
 </p>
 
+[![CI](https://github.com/fluttercandies/kache/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/fluttercandies/kache/actions/workflows/ci.yaml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/fluttercandies/kache/blob/main/LICENSE)
+
 [English](README.md)
 
 Kache 是面向 Dart 和 Flutter 的类型安全 stale-while-revalidate 缓存库。它能先
@@ -16,15 +19,15 @@ Kache 是面向 Dart 和 Flutter 的类型安全 stale-while-revalidate 缓存�
 
 | 包 | 用途 | 运行时边界 |
 | --- | --- | --- |
-| `kache` | 缓存状态机、并发、策略、内存后端 | 仅 Dart SDK |
-| `kache_flutter` | Scope、Controller、Builder、Listener、应用生命周期 | Flutter + `kache` |
-| `kache_flutter_hooks` | `useKache` controller 生命周期绑定 | Flutter Hooks + `kache_flutter` |
-| `kache_hive_ce` | Hive CE TypeAdapter/native record、codec、迁移 | Hive CE + `kache` |
-| `kache_connectivity_plus` | 自动网络恢复重验 | connectivity_plus + `kache` |
-| `kache_riverpod` | provider/family/auto-dispose notifier 接入 | Riverpod + `kache` |
-| `kache_hooks_riverpod` | 已有 Kache provider 的 `useKacheProvider` | Hooks Riverpod + `kache_riverpod` |
-| `kache_bloc` | `KacheCubit` 与可组合 binding | Bloc + `kache` |
-| `kache_provider` | Provider 组件与 context helper | Provider + `kache_flutter` |
+| [`kache`](https://pub.dev/packages/kache) | 缓存状态机、并发、策略、内存后端 | 仅 Dart SDK |
+| [`kache_flutter`](https://pub.dev/packages/kache_flutter) | Scope、Controller、Builder、Listener、应用生命周期 | Flutter + `kache` |
+| [`kache_flutter_hooks`](https://pub.dev/packages/kache_flutter_hooks) | `useKache` controller 生命周期绑定 | Flutter Hooks + `kache_flutter` |
+| [`kache_hive_ce`](https://pub.dev/packages/kache_hive_ce) | Hive CE TypeAdapter/native record、codec、迁移 | Hive CE + `kache` |
+| [`kache_connectivity_plus`](https://pub.dev/packages/kache_connectivity_plus) | 自动网络恢复重验 | connectivity_plus + `kache` |
+| [`kache_riverpod`](https://pub.dev/packages/kache_riverpod) | provider/family/auto-dispose notifier 接入 | Riverpod + `kache` |
+| [`kache_hooks_riverpod`](https://pub.dev/packages/kache_hooks_riverpod) | 已有 Kache provider 的 `useKacheProvider` | Hooks Riverpod + `kache_riverpod` |
+| [`kache_bloc`](https://pub.dev/packages/kache_bloc) | `KacheCubit` 与可组合 binding | Bloc + `kache` |
+| [`kache_provider`](https://pub.dev/packages/kache_provider) | Provider 组件与 context helper | Provider + `kache_flutter` |
 
 应用通常只声明一个最上层 Kache 接入包。只有源码直接 import 更底层能力时才额外
 声明，例如持久化使用 `kache_hive_ce`，Bloc UI 使用 `flutter_bloc`。

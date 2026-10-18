@@ -4,6 +4,9 @@
   <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
 </p>
 
+[![CI](https://github.com/fluttercandies/kache/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/fluttercandies/kache/actions/workflows/ci.yaml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/fluttercandies/kache/blob/main/LICENSE)
+
 [简体中文](README.zh-CN.md)
 
 Kache is a type-safe stale-while-revalidate cache for Dart and Flutter. It can
@@ -18,15 +21,15 @@ and state-management integrations are separate packages.
 
 | Package | Purpose | Runtime boundary |
 | --- | --- | --- |
-| `kache` | Cache state machine, concurrency, policies, memory backend | Dart SDK only |
-| `kache_flutter` | Scope, controller, builder, listener, app lifecycle | Flutter + `kache` |
-| `kache_flutter_hooks` | `useKache` controller lifecycle binding | Flutter Hooks + `kache_flutter` |
-| `kache_hive_ce` | Hive CE TypeAdapter/native records, codecs, migrations | Hive CE + `kache` |
-| `kache_connectivity_plus` | Automatic reconnect revalidation | connectivity_plus + `kache` |
-| `kache_riverpod` | Provider/family/auto-dispose notifier integration | Riverpod + `kache` |
-| `kache_hooks_riverpod` | `useKacheProvider` for existing Kache providers | Hooks Riverpod + `kache_riverpod` |
-| `kache_bloc` | `KacheCubit` and composable binding | Bloc + `kache` |
-| `kache_provider` | Provider widgets and context helpers | Provider + `kache_flutter` |
+| [`kache`](https://pub.dev/packages/kache) | Cache state machine, concurrency, policies, memory backend | Dart SDK only |
+| [`kache_flutter`](https://pub.dev/packages/kache_flutter) | Scope, controller, builder, listener, app lifecycle | Flutter + `kache` |
+| [`kache_flutter_hooks`](https://pub.dev/packages/kache_flutter_hooks) | `useKache` controller lifecycle binding | Flutter Hooks + `kache_flutter` |
+| [`kache_hive_ce`](https://pub.dev/packages/kache_hive_ce) | Hive CE TypeAdapter/native records, codecs, migrations | Hive CE + `kache` |
+| [`kache_connectivity_plus`](https://pub.dev/packages/kache_connectivity_plus) | Automatic reconnect revalidation | connectivity_plus + `kache` |
+| [`kache_riverpod`](https://pub.dev/packages/kache_riverpod) | Provider/family/auto-dispose notifier integration | Riverpod + `kache` |
+| [`kache_hooks_riverpod`](https://pub.dev/packages/kache_hooks_riverpod) | `useKacheProvider` for existing Kache providers | Hooks Riverpod + `kache_riverpod` |
+| [`kache_bloc`](https://pub.dev/packages/kache_bloc) | `KacheCubit` and composable binding | Bloc + `kache` |
+| [`kache_provider`](https://pub.dev/packages/kache_provider) | Provider widgets and context helpers | Provider + `kache_flutter` |
 
 Choose one top-level integration package in application code. Add a lower
 level package only when your source imports it directly, such as

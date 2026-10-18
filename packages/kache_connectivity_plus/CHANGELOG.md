@@ -13,6 +13,9 @@
 - Paused subscribers resume with only the newest state instead of replaying
   buffered history, and streams returned after `close()` are broadcast like
   live streams.
+- Published READMEs now load the Kache logo from an absolute URL, because
+  pub.dev does not render relative README images, and add pub, CI, and license
+  badges.
 
 ## 3.1.0
 

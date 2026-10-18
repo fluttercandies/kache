@@ -2,6 +2,9 @@
 
 - Fixed `KacheCubit` emitting older snapshots when concurrent commands resolved
   after newer resource updates; state revisions are now strictly increasing.
+- Published READMEs now load the Kache logo from an absolute URL, because
+  pub.dev does not render relative README images, and add pub, CI, and license
+  badges.
 
 ## 3.1.0
 

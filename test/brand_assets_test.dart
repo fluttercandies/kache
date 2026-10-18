@@ -15,9 +15,25 @@ const _packagePaths = <String>[
   'packages/kache_connectivity_plus',
   'packages/kache_provider',
 ];
-const _readmeLogo = '''<p align="center">
-  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
-</p>''';
+const _repository = 'https://github.com/fluttercandies/kache';
+const _rawMain = 'https://raw.githubusercontent.com/fluttercandies/kache/main';
+const _ciBadge =
+    '[![CI]($_repository/actions/workflows/ci.yaml/badge.svg?branch=main)]'
+    '($_repository/actions/workflows/ci.yaml)';
+
+/// pub.dev drops relative README images, so published READMEs reference the
+/// package's own published asset through an absolute URL. The repository
+/// README is rendered by GitHub and keeps the relative path.
+String _readmeLogo(String root) {
+  final source = root == '.'
+      ? _canonicalLogoPath
+      : '$_rawMain/$root/$_canonicalLogoPath';
+  return '<p align="center">\n'
+      '  <img src="$source" alt="Kache logo" width="128">\n'
+      '</p>';
+}
+
+String _packageName(String root) => root.split('/').last;
 
 void main() {
   test('canonical logo is an accessible self-contained vector mark', () {
@@ -106,15 +122,63 @@ void main() {
     for (final root in <String>['.', ..._packagePaths]) {
       for (final fileName in const <String>['README.md', 'README.zh-CN.md']) {
         final readme = File('$root/$fileName').readAsStringSync();
+        final logo = _readmeLogo(root);
         expect(
-          _occurrences(readme, _readmeLogo),
+          _occurrences(readme, logo),
           1,
           reason: '$root/$fileName must contain one standard logo block.',
         );
         expect(
-          readme.indexOf(_readmeLogo),
+          readme.indexOf(logo),
           greaterThan(readme.indexOf('\n')),
           reason: '$root/$fileName must keep its title before the logo.',
+        );
+        if (root != '.') {
+          expect(
+            readme,
+            isNot(contains('src="assets/')),
+            reason:
+                '$root/$fileName renders on pub.dev, which drops '
+                'relative images.',
+          );
+        }
+      }
+    }
+  });
+
+  test('every README carries the release badges after its logo', () {
+    for (final root in <String>['.', ..._packagePaths]) {
+      final license = root == '.' ? 'LICENSE' : '$root/LICENSE';
+      final badges = <String>[
+        if (root != '.')
+          '[![pub package](https://img.shields.io/pub/v/'
+              '${_packageName(root)}.svg)]'
+              '(https://pub.dev/packages/${_packageName(root)})',
+        _ciBadge,
+        '[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)]'
+            '($_repository/blob/main/$license)',
+      ].join('\n');
+      expect(File(license).existsSync(), isTrue, reason: license);
+      for (final fileName in const <String>['README.md', 'README.zh-CN.md']) {
+        final readme = File('$root/$fileName').readAsStringSync();
+        expect(
+          readme,
+          contains('${_readmeLogo(root)}\n\n$badges\n'),
+          reason: '$root/$fileName must place its badges after the logo.',
+        );
+      }
+    }
+  });
+
+  test('the root package tables link every published package', () {
+    for (final fileName in const <String>['README.md', 'README.zh-CN.md']) {
+      final readme = File(fileName).readAsStringSync();
+      for (final root in _packagePaths) {
+        final name = _packageName(root);
+        expect(
+          readme,
+          contains('| [`$name`](https://pub.dev/packages/$name) |'),
+          reason: '$fileName must link $name to pub.dev.',
         );
       }
     }

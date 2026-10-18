@@ -1,8 +1,12 @@
 # kache_hive_ce
 
 <p align="center">
-  <img src="assets/kache-logo.svg" alt="Kache logo" width="128">
+  <img src="https://raw.githubusercontent.com/fluttercandies/kache/main/packages/kache_hive_ce/assets/kache-logo.svg" alt="Kache logo" width="128">
 </p>
+
+[![pub package](https://img.shields.io/pub/v/kache_hive_ce.svg)](https://pub.dev/packages/kache_hive_ce)
+[![CI](https://github.com/fluttercandies/kache/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/fluttercandies/kache/actions/workflows/ci.yaml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/fluttercandies/kache/blob/main/packages/kache_hive_ce/LICENSE)
 
 [English](README.md)
 
