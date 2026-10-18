@@ -8,9 +8,6 @@ export 'background_failure.dart';
 /// inline there.
 const bool supportsBackgroundWork = false;
 
-/// Background isolates are unavailable, so nothing can be sent to one.
-bool canSendToIsolate(Object? message) => false;
-
 /// Reports that background isolates are unavailable on this platform.
 ///
 /// Callers check [supportsBackgroundWork] first; this keeps the contract

@@ -7,22 +7,6 @@ export 'background_failure.dart';
 /// Whether this platform can run codec work on a background isolate.
 const bool supportsBackgroundWork = true;
 
-/// Whether [message] can be copied to another isolate.
-///
-/// Sending to a port that is closed immediately afterwards validates the
-/// object graph without delivering it anywhere.
-bool canSendToIsolate(Object? message) {
-  final port = RawReceivePort();
-  try {
-    port.sendPort.send(message);
-    return true;
-  } on Object {
-    return false;
-  } finally {
-    port.close();
-  }
-}
-
 /// Runs [work] on a short-lived isolate and returns its result.
 ///
 /// Errors thrown by [work] are rethrown unchanged with their remote stack
