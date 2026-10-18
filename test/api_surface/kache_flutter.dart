@@ -32,3 +32,12 @@ Future<KacheSnapshot<int>> verifyControllerRefresh(
 
 bool verifyControllerCancel(KacheController<int> controller) =>
     controller.cancel();
+
+KacheBuildWhen<int> verifyBuildWhen(KacheBuildWhen<int> buildWhen) => buildWhen;
+
+KacheBuilder<int> verifyBuilderBuildWhen(KacheQuery<int> query) =>
+    KacheBuilder<int>(
+      query: query,
+      buildWhen: (previous, current) => previous.hasData != current.hasData,
+      builder: (context, snapshot, controller) => const SizedBox(),
+    );

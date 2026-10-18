@@ -90,10 +90,13 @@ query。
 - `KacheScope` 提供 client，在离开前台时暂停轮询，并把
   `AppLifecycleState.resumed` 桥接到策略驱动重验；reconnect 工作也会延后到应用
   返回前台。
-- `KacheBuilder<T>` 拥有一个 `KacheController<T>`，根据完整快照重建。
+- `KacheBuilder<T>` 拥有一个 `KacheController<T>`，根据完整快照重建。传入
+  `buildWhen: (previous, current) => ...` 可跳过重建，例如只有 `snapshot.persistence`
+  变化时；client 或 key 变化始终重建。
 - `KacheListener<T>` 执行副作用，不重建 child。
 - `KacheController<T>` 实现 `ValueListenable<KacheSnapshot<T>>`，并暴露所有资源命令，
-  包括取消当前 key 共享 fetch 的 `cancel()`。
+  包括取消当前 key 共享 fetch 的 `cancel()`。它的值只向前推进：revision 更旧的回放或
+  迟到快照会被忽略，监听者不会看到已缓存页面退回 `idle` 或 `loading`。
 
 `HookWidget` 使用独立的 `kache_flutter_hooks` 包。它的 `useKache(query)` 返回同一个
 controller 类型，不增加第二套状态模型。

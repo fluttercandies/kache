@@ -100,6 +100,31 @@ adapter 的读取向后兼容；格式演进需要显式 codec 身份和迁移�
 迁移会立即返回类型化数据，随后由 Kache 以竞争安全的惰性 maintenance 重写当前
 `codecId`。maintenance 失败会进入 persistence state 和 event，但不会隐藏已读取数据。
 
+## 大数据与 isolate
+
+`isolateThreshold` 决定 byte codec 工作在哪里执行。小于阈值（默认 64 KiB）的记录同步
+解码，缓存数据在首帧即可使用；更大的记录在后台 isolate 中解码、迁移和编码，只有
+`box.get` 与 `box.put` 留在调用方 isolate。
+
+```dart
+final store = await HiveCeKacheStore.open(
+  boxName: 'kache',
+  isolateThreshold: 64 * 1024, // `null` 表示所有 codec 工作都内联执行。
+);
+```
+
+- 用顶层函数或静态函数构建 codec。若 codec 回调捕获了无法发送到其他 isolate 的状态，
+  会自动回退为内联执行；读取不会因此失败，也不会删除记录。codec 必须无副作用，因为回退
+  会重复执行它。
+- 某个 codec 的首次写入因大小未知而内联执行，之后的写入按已存记录大小判断。
+- 同一 key 的写入保持调用顺序；`clear`、`clearNamespace` 与 `close` 会等待后台写入完成。
+- Web 没有后台 isolate，codec 工作始终内联执行。
+- Flutter widget 测试运行在不会完成 isolate 任务的 fake clock 下。请让测试 payload 小于
+  阈值，或传入 `isolateThreshold: null`。
+
+在应用启动阶段打开 store：打开 box 会解析其中全部记录。大列表优先使用紧凑二进制 codec
+而不是 JSON，超大列表按页拆分到不同 key 缓存。
+
 ## 物理键策略
 
 逻辑 `KacheKey` 通过域分隔摘要映射为固定长度的物理 Hive box 键。物理键不直接编码
@@ -188,6 +213,7 @@ box 获取期间的所有失败——cipher 不匹配、策略不匹配、以及
 | Dart | Dart >=3.5.0 <4.0.0 |
 | Flutter | 不需要 |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| 后台 codec 工作 | 原生平台；Web 内联执行 codec |
 
 ## 许可证
 

@@ -1,3 +1,8 @@
+## 3.1.0
+
+- Updated the re-exported Kache Flutter dependency to `^3.1.0`, which stops
+  provided controllers from replaying stale snapshots on page entry.
+
 ## 3.0.0
 
 - Updated the re-exported Kache Flutter dependency to `^3.0.0`; Provider

@@ -1,3 +1,8 @@
+## 3.1.0
+
+- Updated the re-exported Kache dependency to `^3.1.0`; native Riverpod
+  provider semantics are unchanged.
+
 ## 3.0.0
 
 - Updated the re-exported Kache dependency to `^3.0.0`; native Riverpod

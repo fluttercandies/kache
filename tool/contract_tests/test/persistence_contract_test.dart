@@ -30,6 +30,12 @@ final class _MemoryPersistenceHarness implements PersistenceContractHarness {
       backend.bind<T>(fingerprint: fingerprint);
 
   @override
+  KachePersistenceBinding<PersistenceContractValue> bindObserved({
+    required String fingerprint,
+    required void Function() onCodecWork,
+  }) => backend.bind<PersistenceContractValue>(fingerprint: fingerprint);
+
+  @override
   FutureOr<void> dispose() => backend.close();
 }
 
@@ -56,6 +62,24 @@ final class _HiveCePersistenceHarness implements PersistenceContractHarness {
   @override
   KachePersistenceBinding<T> bind<T>({required String fingerprint}) => backend
       .bind<T>(codecId: fingerprint, codec: _contractCodec<T>(fingerprint));
+
+  @override
+  KachePersistenceBinding<PersistenceContractValue> bindObserved({
+    required String fingerprint,
+    required void Function() onCodecWork,
+  }) => backend.bind<PersistenceContractValue>(
+    codecId: fingerprint,
+    codec: HiveCeCodec<PersistenceContractValue>(
+      encode: (value) {
+        onCodecWork();
+        return utf8.encode(value.value);
+      },
+      decode: (bytes) {
+        onCodecWork();
+        return PersistenceContractValue(utf8.decode(bytes));
+      },
+    ),
+  );
 
   @override
   FutureOr<void> dispose() => backend.close();

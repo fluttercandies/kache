@@ -1,3 +1,10 @@
+## 3.1.0
+
+- Documented the persistence backend synchronous-prefix contract: work that
+  runs before `read` or `write` first yields must not scale with payload size,
+  because the core may call them inside a listener's synchronous stack such as
+  a widget build.
+
 ## 3.0.0
 
 - Changed persistence reads to return `KachePersistenceRead<T>`, which exposes

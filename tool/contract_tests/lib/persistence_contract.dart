@@ -11,6 +11,17 @@ abstract interface class PersistenceContractHarness {
   /// Creates a binding owned by [backend].
   KachePersistenceBinding<T> bind<T>({required String fingerprint});
 
+  /// Creates a binding whose value conversion calls [onCodecWork] each time
+  /// it encodes or decodes a value.
+  ///
+  /// Backends that store values without conversion never call it. Backends
+  /// that run conversion on another isolate observe calls only on that
+  /// isolate's copy of [onCodecWork], never on the caller's.
+  KachePersistenceBinding<PersistenceContractValue> bindObserved({
+    required String fingerprint,
+    required void Function() onCodecWork,
+  });
+
   /// Stage used when a stored fingerprint cannot be read by a new binding.
   KachePersistenceStage get fingerprintMismatchStage;
 
@@ -300,6 +311,49 @@ void runPersistenceContract({
         _expectBackendFailure(error, operation);
       });
     }
+
+    test(
+      'keeps large-value codec work out of the synchronous prefix',
+      () async {
+        final harness = await _createHarness(createHarness);
+        var callerCodecWork = 0;
+        final binding = harness.bindObserved(
+          fingerprint: 'observed-v1',
+          onCodecWork: () => callerCodecWork += 1,
+        );
+        final key = KacheKey('large', [1]);
+        final value = PersistenceContractValue('x' * (1 << 20));
+        final entry = KachePersistedEntry<PersistenceContractValue>(
+          data: value,
+          metadata: _metadata(),
+        );
+        // A first write may run inline while the backend learns value sizes.
+        await harness.backend.write<PersistenceContractValue>(
+          key: key,
+          binding: binding,
+          entry: entry,
+        );
+        callerCodecWork = 0;
+
+        final write = harness.backend.write<PersistenceContractValue>(
+          key: key,
+          binding: binding,
+          entry: entry,
+        );
+        expect(callerCodecWork, 0, reason: 'write synchronous prefix');
+        await write;
+        callerCodecWork = 0;
+        final read = harness.backend.read<PersistenceContractValue>(
+          key: key,
+          binding: binding,
+        );
+        expect(callerCodecWork, 0, reason: 'read synchronous prefix');
+
+        expect((await read)?.entry.data, value);
+      },
+      // Web has no background isolates; every backend runs codecs inline.
+      testOn: 'vm',
+    );
 
     test('closes idempotently', () async {
       final harness = await _createHarness(createHarness);

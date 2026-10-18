@@ -10,6 +10,17 @@ import 'key.dart';
 /// Implementations must wrap backend-defined failures in
 /// [KachePersistenceException] using the operation being performed and one of
 /// the stages allowed by that exception's constructor.
+///
+/// ## Synchronous prefix
+///
+/// The core may call [read] and [write] from inside a listener's synchronous
+/// call stack, including widget builds that subscribe to a resource. Work that
+/// runs before the returned future first yields therefore blocks that caller.
+/// Implementations must keep this synchronous prefix independent of payload
+/// size: decoding, encoding, copying, or hashing a large value must happen
+/// after the first asynchronous gap, typically on another isolate or native
+/// thread. Small values may be processed inline so cached data can render in
+/// the first frame. How and where large work runs is an implementation detail.
 abstract interface class KachePersistenceBackend {
   /// Reads the entry for [key], or returns `null` when no entry exists.
   ///

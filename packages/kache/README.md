@@ -126,6 +126,12 @@ passes typed `T` values, an opaque `KachePersistenceBinding<T>`, and
 `KachePersistedMetadata`. Serialization, codecs, format migration, encryption,
 and physical records belong to the backend package, not this package.
 
+The core may call `read` and `write` inside a listener's synchronous stack,
+such as a widget build that subscribes to a resource. Work that runs before
+the returned future first yields must not grow with payload size; decode,
+encode, or copy large values after an asynchronous gap, for example on another
+isolate. Where that work runs is up to the backend.
+
 `MemoryKachePersistence` is a process-local reference implementation. For
 restart-safe storage, use `kache_hive_ce` or a custom backend.
 

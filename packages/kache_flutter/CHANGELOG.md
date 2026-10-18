@@ -1,3 +1,14 @@
+## 3.1.0
+
+- Fixed `KacheController` rolling back to stale snapshots. Subscription
+  replay and late command results with an older revision are now ignored,
+  which removes a redundant rebuild on page entry and stops `KacheListener`
+  from reporting false `ready -> idle -> loading` transitions.
+- Added optional `KacheBuilder.buildWhen` (mirroring `KacheListener.listenWhen`)
+  to skip rebuilds such as persistence-only changes. A client or key change
+  always rebuilds.
+- Updated the re-exported Kache dependency to `^3.1.0`.
+
 ## 3.0.0
 
 - Updated the re-exported Kache dependency to `^3.0.0` for the persistence

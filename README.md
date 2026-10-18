@@ -177,6 +177,14 @@ and cache metadata. `kache_hive_ce` can reuse an already registered
 `TypeAdapter<T>` with `store.bindAdapter<T>(adapter)` or use its explicit byte
 codec binding for independently versioned formats.
 
+Large cached pages stay smooth on entry. `HiveCeKacheStore` decodes records
+below `isolateThreshold` (64 KiB by default) synchronously, so cached data
+renders in the first frame, and decodes or encodes larger records on a
+background isolate so the subscribing frame is never blocked. Open the store
+during app startup rather than in the first page, prefer compact binary codecs
+built from top-level functions, and split very large lists into pages that are
+cached under separate keys.
+
 ## Custom persistence
 
 Implement `KachePersistenceBackend` for SQLite, Isar, files, secure storage, or
@@ -188,7 +196,9 @@ another system. Your backend must:
 - implement exact namespace-prefix clearing;
 - wrap I/O and codec errors in `KachePersistenceException`;
 - report the actual persistence operation in every wrapped exception;
-- define idempotent ownership and `close()` behavior.
+- define idempotent ownership and `close()` behavior;
+- keep the synchronous part of `read` and `write` independent of payload size,
+  because the core may call them inside a widget build.
 
 The core validates the operation field at its boundary. A mismatched backend
 exception is treated as a backend failure for the operation actually running,

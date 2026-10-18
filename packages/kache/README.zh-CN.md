@@ -117,6 +117,10 @@ binding。
 `KachePersistenceBinding<T>` 和 `KachePersistedMetadata`。序列化、codec、格式迁移、
 加密和物理记录属于 backend 包，不属于核心。
 
+核心可能在监听者的同步调用栈内调用 `read` 和 `write`，例如订阅资源的 widget build。
+返回的 future 首次让出之前执行的工作不得随 payload 大小增长；大值的解码、编码或拷贝
+应放到异步间隔之后，例如另一个 isolate。具体在哪里执行由 backend 决定。
+
 `MemoryKachePersistence` 是进程内参考实现。需要跨重启持久化时使用
 `kache_hive_ce` 或自定义 backend。
 

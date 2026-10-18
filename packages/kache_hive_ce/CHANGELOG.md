@@ -1,3 +1,22 @@
+## 3.1.0
+
+- Added `isolateThreshold` to `HiveCeKacheStore.open` and `fromBox`
+  (default 64 KiB, `null` keeps all codec work inline). Byte-codec decode,
+  migration, and encode for records at or above the threshold run on a
+  background isolate, so large cached pages no longer block the frame that
+  subscribes to them. Smaller records still decode synchronously and render in
+  the first frame. Codecs whose callbacks cannot be sent to another isolate
+  fall back to inline work without failing the read or deleting the record.
+- Large cached reads now complete asynchronously. Widget tests that use large
+  payloads under the fake clock should pass `isolateThreshold: null`.
+- Kept per-key call order for offloaded writes: later reads, writes, and
+  deletes of the same key wait for them, and `clear`, `clearNamespace`, and
+  `close` drain them first. Inline writes keep their synchronous start.
+- Removed redundant whole-payload copies on read and write, and replaced the
+  migration rewrite's byte-by-byte record comparison with an identity check.
+  On Web, codec work always runs inline.
+- Updated the Kache dependency to `^3.1.0`.
+
 ## 3.0.0
 
 - Removed the duplicate integer schema API. `codecId` is now the sole byte

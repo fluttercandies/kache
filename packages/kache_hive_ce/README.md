@@ -107,6 +107,38 @@ Migration returns typed data immediately. Kache then schedules race-safe lazy
 maintenance to rewrite the record under the current `codecId`. A maintenance
 failure remains visible in persistence state and events without hiding data.
 
+## Large values and isolates
+
+`isolateThreshold` controls where byte-codec work runs. Records smaller than
+the threshold (64 KiB by default) are decoded synchronously, so cached data is
+available in the first frame. Larger records are decoded, migrated, and encoded
+on a background isolate; only `box.get` and `box.put` stay on the calling
+isolate.
+
+```dart
+final store = await HiveCeKacheStore.open(
+  boxName: 'kache',
+  isolateThreshold: 64 * 1024, // `null` keeps all codec work inline.
+);
+```
+
+- Build codecs from top-level or static functions. A codec whose callbacks
+  capture state that cannot be sent to another isolate falls back to inline
+  work automatically; the read never fails and the record is never deleted
+  because of it. Codecs must be free of side effects because a fallback
+  repeats them.
+- The first write of a codec runs inline because its size is unknown; later
+  writes use the stored record size.
+- Writes to the same key keep their call order; `clear`, `clearNamespace`, and
+  `close` wait for offloaded writes.
+- On Web there are no background isolates, so codec work always runs inline.
+- Flutter widget tests run under a fake clock that never completes isolate
+  work. Use payloads below the threshold there or pass `isolateThreshold: null`.
+
+Open the store during app startup: opening a box parses every record in it.
+Prefer compact binary codecs over JSON for large lists, and cache very large
+lists in pages under separate keys.
+
 ## Physical key strategy
 
 Logical `KacheKey`s are mapped to fixed-length physical Hive box keys using a
@@ -214,6 +246,7 @@ single lifecycle owner. Closing both layers is idempotent.
 | Dart | Dart >=3.5.0 <4.0.0 |
 | Flutter | Not required |
 | Hive CE | `>=2.19.3 <3.0.0` |
+| Background codec work | Native platforms; Web runs codecs inline |
 
 ## License
 

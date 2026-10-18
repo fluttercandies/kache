@@ -162,6 +162,11 @@ Flutter 应用可使用官方 `kache_connectivity_plus` 适配包。网络接口
 `store.bindAdapter<T>(adapter)` 复用已注册的 `TypeAdapter<T>`，也可以使用显式 byte
 codec binding 独立演进存储格式。
 
+大缓存页面进入时同样流畅。`HiveCeKacheStore` 对小于 `isolateThreshold`（默认
+64 KiB）的记录同步解码，缓存数据在首帧直接显示；更大的记录在后台 isolate 解码或编码，
+不会阻塞订阅它的那一帧。建议在应用启动阶段而不是首个页面中打开 store，优先使用由顶层
+函数构成的紧凑二进制 codec，并把超大列表拆成按页分 key 缓存。
+
 ## 自定义持久层
 
 可以为 SQLite、Isar、文件、安全存储或其他系统实现 `KachePersistenceBackend`。
@@ -173,7 +178,8 @@ codec binding 独立演进存储格式。
 - 按规范 namespace prefix 精确清理；
 - 用 `KachePersistenceException` 包装 I/O 和 codec 失败；
 - 每个包装异常报告实际发生的 persistence operation；
-- 明确定义幂等所有权与 `close()` 语义。
+- 明确定义幂等所有权与 `close()` 语义；
+- `read`、`write` 的同步部分不得随 payload 大小增长，因为核心可能在 widget build 内调用它们。
 
 核心会在边界校验 operation 字段。backend 标记错误 operation 时，核心按实际运行的
 操作归类为 backend 失败，同时保留原始异常和堆栈。

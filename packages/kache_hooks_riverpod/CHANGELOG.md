@@ -1,3 +1,8 @@
+## 3.1.0
+
+- Updated the re-exported Kache Riverpod dependency to `^3.1.0`; Hooks
+  Riverpod lifecycle behavior is unchanged.
+
 ## 3.0.0
 
 - Updated the re-exported Kache Riverpod dependency to `^3.0.0`; Hooks

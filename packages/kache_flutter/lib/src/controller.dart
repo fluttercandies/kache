@@ -169,7 +169,11 @@ final class KacheController<T> extends ChangeNotifier
   }
 
   void _accept(KacheSnapshot<T> snapshot) {
-    if (identical(_value, snapshot)) {
+    // Revisions increase strictly within one binding. The resource stream
+    // replays older snapshots after [value] already holds a newer one, and a
+    // command result can arrive after newer stream updates; neither may roll
+    // listeners back. Rebinding resets [_value] before new events arrive.
+    if (snapshot.revision <= _value.revision) {
       return;
     }
     _value = snapshot;

@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:kache/kache.dart';
 import 'package:kache_hive_ce/kache_hive_ce.dart';
 
+import 'page_entry_benchmark.dart';
+
 final class BenchmarkResult {
   const BenchmarkResult({
     required this.name,
@@ -37,6 +39,7 @@ final class BenchmarkResult {
 Future<Map<String, BenchmarkResult>> runKacheBenchmarks({
   int iterations = 20000,
   int keyCount = 128,
+  int pageEntrySamples = 15,
 }) async {
   if (iterations <= 0 || keyCount <= 0) {
     throw ArgumentError('iterations and keyCount must be positive.');
@@ -46,6 +49,7 @@ Future<Map<String, BenchmarkResult>> runKacheBenchmarks({
   results['core.multi_key_peek'] = await _multiKeyPeek(iterations, keyCount);
   results['core.single_flight'] = await _singleFlight(keyCount);
   results['hive_ce.codec_round_trip'] = _codecRoundTrip(iterations);
+  results.addAll(await runPageEntryBenchmarks(samples: pageEntrySamples));
   return results;
 }
 
@@ -174,7 +178,7 @@ final class _Payload {
 }
 
 Future<void> main() async {
-  stdout.writeln('kache.benchmark.v=1');
+  stdout.writeln('kache.benchmark.v=2');
   final results = await runKacheBenchmarks();
   for (final result in results.values) {
     stdout.writeln(result.format());

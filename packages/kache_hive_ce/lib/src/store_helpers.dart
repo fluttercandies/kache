@@ -18,9 +18,9 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
     _throwCompatibility(operation);
   }
 
-  HiveCeEnvelope _decodeEnvelope(Uint8List raw) {
+  HiveCeEnvelopeHeader _parseHeader(Uint8List raw) {
     try {
-      return HiveCeEnvelope.decode(raw);
+      return HiveCeEnvelopeHeader.parse(raw);
     } on Object catch (error, stackTrace) {
       _throwPersistence(
         operation: KachePersistenceOperation.read,
@@ -31,66 +31,41 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
     }
   }
 
-  T _decodeCurrent<T>(HiveCeBinding<T> binding, Uint8List payload) {
-    try {
-      return binding.codec.decode(Uint8List.fromList(payload));
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.decode,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-    }
+  /// Stores an encoded record.
+  ///
+  /// Accepted writes complete even when [close] starts while they encode,
+  /// because close drains them before releasing the box.
+  Future<void> _putRecord(String physicalKey, Uint8List record) {
+    return _runBackend(
+      KachePersistenceOperation.write,
+      () => box.put(physicalKey, record),
+    );
   }
 
-  T _migrate<T>(
-    HiveCeBinding<T> binding,
-    Uint8List payload,
-    String fromCodecId,
-  ) {
-    final migrate = binding.migrate;
-    if (migrate == null) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.migration,
-        cause: StateError('No migration is configured for the stored codec.'),
-        stackTrace: StackTrace.current,
-      );
-    }
-    try {
-      return migrate(Uint8List.fromList(payload), fromCodecId);
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.read,
-        stage: KachePersistenceStage.migration,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-    }
-  }
-
+  /// Rewrites a migrated value in the current codec format.
+  ///
+  /// Hive replaces a key's in-memory value instance on every put, so the
+  /// record is unchanged exactly when the box still holds [readRecord].
   Future<void> _rewriteMigrated<T>(
     HiveCeBinding<T> binding,
     KachePersistedEntry<T> entry,
-    Uint8List expectedRecord, {
+    Uint8List readRecord, {
     required String physicalKey,
   }) async {
     try {
       _ensureOpen(KachePersistenceOperation.read);
-      final current = box.get(physicalKey);
-      if (current is! Uint8List || !_bytesEqual(current, expectedRecord)) {
+      if (!identical(box.get(physicalKey), readRecord)) {
         return;
       }
-      final payload = Uint8List.fromList(binding.codec.encode(entry.data));
-      final record = HiveCeEnvelope.encode(
-        fetchedAt: entry.metadata.fetchedAt,
-        isInvalidated: entry.metadata.isInvalidated,
-        codecId: binding.codecId,
-        payload: payload,
+      final record = await _encodeRecord<T>(
+        binding,
+        entry,
+        estimatedBytes: readRecord.length,
+        operation: KachePersistenceOperation.read,
+        stage: KachePersistenceStage.migration,
       );
-      final latest = box.get(physicalKey);
-      if (latest is! Uint8List || !_bytesEqual(latest, expectedRecord)) {
+      _ensureOpen(KachePersistenceOperation.read);
+      if (!identical(box.get(physicalKey), readRecord)) {
         return;
       }
       await box.put(physicalKey, record);
@@ -152,18 +127,6 @@ extension _HiveCeKacheStoreHelpers on HiveCeKacheStore {
         cause: StateError('Hive CE binding is incompatible with the record.'),
         stackTrace: StackTrace.current,
       );
-}
-
-bool _bytesEqual(Uint8List first, Uint8List second) {
-  if (first.length != second.length) {
-    return false;
-  }
-  for (var index = 0; index < first.length; index++) {
-    if (first[index] != second[index]) {
-      return false;
-    }
-  }
-  return true;
 }
 
 Never _throwPersistence({

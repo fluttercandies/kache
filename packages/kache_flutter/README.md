@@ -92,10 +92,15 @@ Pull to refresh calls the same deduplicated query explicitly.
   bridges `AppLifecycleState.resumed` to policy-driven revalidation. It also
   defers reconnect work until the app returns to the foreground.
 - `KacheBuilder<T>` owns one `KacheController<T>` and rebuilds from complete
-  snapshots.
+  snapshots. Pass `buildWhen: (previous, current) => ...` to skip rebuilds,
+  for example when only `snapshot.persistence` changed; a client or key change
+  always rebuilds.
 - `KacheListener<T>` performs side effects without rebuilding its child.
 - `KacheController<T>` is a `ValueListenable<KacheSnapshot<T>>` and exposes all
   resource commands, including `cancel()` for the current key's shared fetch.
+  Its value only moves forward: replayed or late snapshots with an older
+  revision are ignored, so listeners never see a cached page fall back to
+  `idle` or `loading`.
 
 For `HookWidget`, use the separate `kache_flutter_hooks` package. Its
 `useKache(query)` hook returns this same controller and does not add another

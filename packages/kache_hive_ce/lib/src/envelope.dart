@@ -83,7 +83,33 @@ final class HiveCeEnvelope {
   }
 
   /// Decodes and strictly validates the fixed `KCH2` record format.
+  ///
+  /// The returned [payload] is a single owned copy of the payload bytes.
   static HiveCeEnvelope decode(Uint8List bytes) {
+    final header = HiveCeEnvelopeHeader.parse(bytes);
+    return HiveCeEnvelope._(
+      fetchedAt: header.fetchedAt,
+      isInvalidated: header.isInvalidated,
+      codecId: header.codecId,
+      payload: bytes.sublist(header.payloadOffset),
+    );
+  }
+}
+
+/// The validated metadata of a `KCH2` record without its payload.
+///
+/// Parsing a header costs time proportional to the codec identifier only, so
+/// it is safe to run in a caller's synchronous stack for any payload size.
+final class HiveCeEnvelopeHeader {
+  const HiveCeEnvelopeHeader._({
+    required this.fetchedAt,
+    required this.isInvalidated,
+    required this.codecId,
+    required this.payloadOffset,
+  });
+
+  /// Strictly validates the fixed header and the declared record length.
+  static HiveCeEnvelopeHeader parse(Uint8List bytes) {
     if (bytes.length < _headerLength) {
       throw const FormatException('Hive CE record is truncated.');
     }
@@ -101,15 +127,15 @@ final class HiveCeEnvelope {
     final fetchedAtMicros = _getSafeInt64(data, 5);
     final codecLength = data.getUint16(13, Endian.big);
     final payloadLength = data.getUint32(15, Endian.big);
-    final expectedLength = _headerLength + codecLength + payloadLength;
-    if (expectedLength != bytes.length) {
+    final payloadOffset = _headerLength + codecLength;
+    if (payloadOffset + payloadLength != bytes.length) {
       throw const FormatException('Hive CE record length is inconsistent.');
     }
 
     late final String codecId;
     try {
       codecId = utf8.decode(
-        bytes.sublist(_headerLength, _headerLength + codecLength),
+        Uint8List.sublistView(bytes, _headerLength, payloadOffset),
         allowMalformed: false,
       );
     } on FormatException {
@@ -128,15 +154,25 @@ final class HiveCeEnvelope {
       throw const FormatException('Hive CE fetchedAt is out of range.');
     }
 
-    return HiveCeEnvelope._(
+    return HiveCeEnvelopeHeader._(
       fetchedAt: fetchedAt,
       isInvalidated: flags & _invalidatedFlag != 0,
       codecId: codecId,
-      payload: Uint8List.fromList(
-        bytes.sublist(_headerLength + codecLength, expectedLength),
-      ),
+      payloadOffset: payloadOffset,
     );
   }
+
+  /// UTC instant stored with the value.
+  final DateTime fetchedAt;
+
+  /// Whether the cache value was explicitly invalidated.
+  final bool isInvalidated;
+
+  /// Stable codec identifier.
+  final String codecId;
+
+  /// Offset of the first payload byte within the record.
+  final int payloadOffset;
 }
 
 void _setSafeInt64(ByteData data, int offset, int value) {

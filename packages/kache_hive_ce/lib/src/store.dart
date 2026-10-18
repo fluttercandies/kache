@@ -7,6 +7,7 @@ import 'package:hive_ce/hive_ce.dart';
 import 'package:kache/kache.dart';
 
 import 'adapter_envelope.dart';
+import 'background.dart';
 import 'codec.dart';
 import 'envelope.dart';
 
@@ -15,6 +16,7 @@ part 'binding.dart';
 part 'adapter.dart';
 part 'box_lease.dart';
 part 'store_helpers.dart';
+part 'codec_runner.dart';
 
 /// Determines whether a store closes an injected Hive box.
 enum HiveCeBoxOwnership {
@@ -53,6 +55,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     required this.boxOwnership,
     required Future<void> Function() releaseBox,
     required HiveCeKeyStrategy keyStrategy,
+    required this.isolateThreshold,
   })  : _releaseBox = releaseBox,
         _keyStrategy = keyStrategy;
 
@@ -60,13 +63,15 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   ///
   /// Pass [keyStrategy] to control physical key derivation. Defaults to
   /// [HiveCeKeyStrategy.sha256]. See [HiveCeKeyStrategy] for security
-  /// considerations.
+  /// considerations. See [isolateThreshold] for background codec work.
   factory HiveCeKacheStore.fromBox(
     Box<Object?> box, {
     HiveCeBoxOwnership ownership = HiveCeBoxOwnership.borrowed,
     HiveInterface? hive,
     HiveCeKeyStrategy keyStrategy = const HiveCeKeyStrategy.sha256(),
+    int? isolateThreshold = _defaultIsolateThreshold,
   }) {
+    _validateIsolateThreshold(isolateThreshold);
     final targetHive = hive ?? Hive;
     _validateBoxOwner(targetHive, box);
     return HiveCeKacheStore._(
@@ -76,6 +81,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       releaseBox:
           ownership == HiveCeBoxOwnership.owned ? box.close : _completeVoid,
       keyStrategy: keyStrategy,
+      isolateThreshold: isolateThreshold,
     );
   }
 
@@ -91,8 +97,9 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   ///
   /// All failures during box acquisition — cipher lease mismatches, strategy
   /// lease mismatches, and asynchronous Hive I/O errors — are reported as
-  /// [HiveCeOpenException]. Invalid [boxName] arguments throw [ArgumentError]
-  /// before any Hive interaction.
+  /// [HiveCeOpenException]. Invalid [boxName] or [isolateThreshold] arguments
+  /// throw [ArgumentError] before any Hive interaction. See [isolateThreshold]
+  /// for background codec work.
   static Future<HiveCeKacheStore> open({
     required String boxName,
     HiveInterface? hive,
@@ -101,8 +108,10 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     bool crashRecovery = true,
     String? path,
     Uint8List? bytes,
+    int? isolateThreshold = _defaultIsolateThreshold,
   }) async {
     _validateBoxName(boxName);
+    _validateIsolateThreshold(isolateThreshold);
     final targetHive = hive ?? Hive;
     final lease = await _acquireHiveBox(
       hive: targetHive,
@@ -121,6 +130,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
           : HiveCeBoxOwnership.borrowed,
       releaseBox: lease.release,
       keyStrategy: keyStrategy,
+      isolateThreshold: isolateThreshold,
     );
   }
 
@@ -133,8 +143,33 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   /// Whether this store participates in closing [box].
   final HiveCeBoxOwnership boxOwnership;
 
+  /// Record size in bytes at which byte-codec work runs on a background
+  /// isolate, or `null` to always run it inline.
+  ///
+  /// Reads compare the stored record size. Writes compare the larger of the
+  /// record already stored for the key and the last record size seen for the
+  /// codec, so the first write of a codec runs inline. Defaults to 64 KiB.
+  ///
+  /// Below the threshold, a cached value is decoded within the caller's
+  /// synchronous stack and can render in the first frame. Above it, decoding
+  /// completes on another isolate and the value arrives a few milliseconds
+  /// later without blocking the caller.
+  ///
+  /// Background work requires codec callbacks whose captured state can be
+  /// sent to another isolate; top-level or static functions always qualify.
+  /// A codec that cannot run on another isolate falls back to inline work
+  /// automatically and stays inline for the lifetime of this store. Codec
+  /// callbacks must be free of side effects because a fallback repeats them.
+  /// On Web, codec work always runs inline. Flutter widget tests run under a
+  /// fake clock that never completes isolate work; pass `null` there or keep
+  /// test payloads below the threshold.
+  final int? isolateThreshold;
+
   final Future<void> Function() _releaseBox;
   final Map<String, Type> _codecTypes = <String, Type>{};
+  final Set<Object> _inlineCodecs = Set<Object>.identity();
+  final Map<String, int> _recordSizeHints = <String, int>{};
+  final Map<String, Future<void>> _pendingWrites = <String, Future<void>>{};
   bool _isClosed = false;
   Future<void>? _closeFuture;
   final HiveCeKeyStrategy _keyStrategy;
@@ -199,6 +234,11 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       KachePersistenceOperation.read,
     );
     final physicalKey = _physicalKeyOf(key);
+    final pending = _pendingWrites[physicalKey];
+    if (pending != null) {
+      await pending;
+      _ensureOpen(KachePersistenceOperation.read);
+    }
     final raw = _safeGet(physicalKey, KachePersistenceOperation.read);
     if (raw == null) {
       return null;
@@ -216,28 +256,24 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
       );
     }
     final byteBinding = hiveBinding as HiveCeBinding<T>;
-    final envelope = _decodeEnvelope(raw);
-    final isCurrentFormat = envelope.codecId == byteBinding.codecId;
-    final data = isCurrentFormat
-        ? _decodeCurrent(byteBinding, envelope.payload)
-        : _migrate(byteBinding, envelope.payload, envelope.codecId);
+    final header = _parseHeader(raw);
+    final data = await _decodePayload<T>(byteBinding, raw, header);
     final entry = KachePersistedEntry<T>(
       data: data,
       metadata: KachePersistedMetadata(
-        fetchedAt: envelope.fetchedAt,
-        isInvalidated: envelope.isInvalidated,
+        fetchedAt: header.fetchedAt,
+        isInvalidated: header.isInvalidated,
       ),
     );
-    if (isCurrentFormat) {
+    if (header.codecId == byteBinding.codecId) {
       return KachePersistenceRead<T>(entry: entry);
     }
-    final expectedRecord = Uint8List.fromList(raw);
     return KachePersistenceRead<T>(
       entry: entry,
       maintenance: () => _rewriteMigrated<T>(
         byteBinding,
         entry,
-        expectedRecord,
+        raw,
         physicalKey: physicalKey,
       ),
     );
@@ -256,49 +292,55 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
     );
     final physicalKey = _physicalKeyOf(key);
     if (hiveBinding is HiveCeAdapterBinding<T>) {
-      await _writeAdapter<T>(
-        physicalKey: physicalKey,
-        binding: hiveBinding,
-        entry: entry,
-      );
+      Future<void> store() => _writeAdapter<T>(
+            physicalKey: physicalKey,
+            binding: hiveBinding,
+            entry: entry,
+          );
+      await (_pendingWrites.containsKey(physicalKey)
+          ? _runInOrder(physicalKey, store)
+          : store());
       return;
     }
     final byteBinding = hiveBinding as HiveCeBinding<T>;
-    late final Uint8List payload;
-    try {
-      payload = Uint8List.fromList(byteBinding.codec.encode(entry.data));
-    } on Object catch (error, stackTrace) {
-      _throwPersistence(
-        operation: KachePersistenceOperation.write,
-        stage: KachePersistenceStage.encode,
-        cause: error,
-        stackTrace: stackTrace,
-      );
-    }
-    final record = HiveCeEnvelope.encode(
-      fetchedAt: entry.metadata.fetchedAt,
-      isInvalidated: entry.metadata.isInvalidated,
-      codecId: byteBinding.codecId,
-      payload: payload,
+    final record = _encodeRecord<T>(
+      byteBinding,
+      entry,
+      estimatedBytes: _estimateWriteBytes(physicalKey, byteBinding.codecId),
+      operation: KachePersistenceOperation.write,
+      stage: KachePersistenceStage.encode,
     );
-    await _runBackend(
-      KachePersistenceOperation.write,
-      () => box.put(physicalKey, record),
+    if (record is Uint8List && !_pendingWrites.containsKey(physicalKey)) {
+      await _putRecord(physicalKey, record);
+      return;
+    }
+    final encoded = Future<Uint8List>.value(record);
+    // Observe failures now; the ordered store reports them to the caller.
+    unawaited(
+        encoded.then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    await _runInOrder(
+      physicalKey,
+      () async => _putRecord(physicalKey, await encoded),
     );
   }
 
   @override
   Future<void> delete({required KacheKey key}) async {
     _ensureOpen(KachePersistenceOperation.delete);
-    await _runBackend(
-      KachePersistenceOperation.delete,
-      () => box.delete(_physicalKeyOf(key)),
-    );
+    final physicalKey = _physicalKeyOf(key);
+    Future<void> remove() => _runBackend(
+          KachePersistenceOperation.delete,
+          () => box.delete(physicalKey),
+        );
+    await (_pendingWrites.containsKey(physicalKey)
+        ? _runInOrder(physicalKey, remove)
+        : remove());
   }
 
   @override
   Future<void> clearNamespace({required KacheNamespace namespace}) async {
     _ensureOpen(KachePersistenceOperation.clearNamespace);
+    await _drainPendingWrites();
     final prefix = _physicalNamespacePrefix(namespace);
     late final List<String> keys;
     try {
@@ -323,6 +365,7 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   @override
   Future<void> clear() async {
     _ensureOpen(KachePersistenceOperation.clear);
+    await _drainPendingWrites();
     late final List<String> keys;
     try {
       keys = box.keys
@@ -356,6 +399,12 @@ final class HiveCeKacheStore implements KachePersistenceBackend {
   }
 
   Future<void> _performClose() async {
+    // Writes accepted before close keep their completion guarantee. The lease
+    // release must otherwise start synchronously so a concurrent reopen sees
+    // the closing lease.
+    if (_pendingWrites.isNotEmpty) {
+      await _drainPendingWrites();
+    }
     try {
       await _releaseBox();
     } on Object catch (error, stackTrace) {

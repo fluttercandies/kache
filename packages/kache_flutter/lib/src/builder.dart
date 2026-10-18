@@ -11,6 +11,12 @@ typedef KacheWidgetBuilder<T> = Widget Function(
   KacheController<T> controller,
 );
 
+/// Selects which cache transitions should rebuild a [KacheBuilder].
+typedef KacheBuildWhen<T> = bool Function(
+  KacheSnapshot<T> previous,
+  KacheSnapshot<T> current,
+);
+
 /// Owns a [KacheController] for a query and rebuilds on snapshot changes.
 class KacheBuilder<T> extends StatefulWidget {
   /// Creates a cache-aware builder.
@@ -18,6 +24,7 @@ class KacheBuilder<T> extends StatefulWidget {
     required this.query,
     required this.builder,
     this.client,
+    this.buildWhen,
     super.key,
   });
 
@@ -30,6 +37,15 @@ class KacheBuilder<T> extends StatefulWidget {
   /// Builds from the complete cache snapshot.
   final KacheWidgetBuilder<T> builder;
 
+  /// Optional transition predicate that decides whether to rebuild.
+  ///
+  /// Receives the snapshot of the last build and the new snapshot. Returning
+  /// `false` skips the rebuild, for example when only
+  /// [KacheSnapshot.persistence] changed. Rebuilds caused by a parent or a
+  /// dependency reuse the snapshot of the last accepted build. Replacing the
+  /// controller after a client or key change always rebuilds.
+  final KacheBuildWhen<T>? buildWhen;
+
   @override
   State<KacheBuilder<T>> createState() => _KacheBuilderState<T>();
 }
@@ -37,6 +53,8 @@ class KacheBuilder<T> extends StatefulWidget {
 final class _KacheBuilderState<T> extends State<KacheBuilder<T>> {
   KacheController<T>? _controller;
   KacheClient? _client;
+  late KacheSnapshot<T> _snapshot;
+  late KacheResource<T> _resource;
 
   @override
   void didChangeDependencies() {
@@ -58,17 +76,12 @@ final class _KacheBuilderState<T> extends State<KacheBuilder<T>> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final controller = _controller!;
-    return ValueListenableBuilder<KacheSnapshot<T>>(
-      valueListenable: controller,
-      builder: (context, snapshot, _) =>
-          widget.builder(context, snapshot, controller),
-    );
-  }
+  Widget build(BuildContext context) =>
+      widget.builder(context, _snapshot, _controller!);
 
   @override
   void dispose() {
+    _controller?.removeListener(_handleChange);
     _controller?.dispose();
     super.dispose();
   }
@@ -84,10 +97,32 @@ final class _KacheBuilderState<T> extends State<KacheBuilder<T>> {
     final replacement = KacheController<T>(
       client: client,
       query: widget.query,
-    );
+    )..addListener(_handleChange);
     final previous = _controller;
     _client = client;
     _controller = replacement;
-    previous?.dispose();
+    _resource = replacement.resource;
+    _snapshot = replacement.value;
+    previous
+      ?..removeListener(_handleChange)
+      ..dispose();
+  }
+
+  void _handleChange() {
+    final controller = _controller!;
+    final current = controller.value;
+    final previous = _snapshot;
+    if (identical(previous, current)) {
+      return;
+    }
+    final buildWhen = widget.buildWhen;
+    // A new resource means the key changed; never keep the old key's data.
+    final rebound = !identical(_resource, controller.resource);
+    if (rebound || buildWhen == null || buildWhen(previous, current)) {
+      setState(() {
+        _resource = controller.resource;
+        _snapshot = current;
+      });
+    }
   }
 }
