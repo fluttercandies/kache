@@ -87,10 +87,7 @@ void main() {
     );
 
     final commands = _commands(_jobSteps(workflow, 'minimum_packages'));
-    expect(
-      commands,
-      contains(r'bash tool/verify_minimum_sdk.sh ${{ matrix.profile }}'),
-    );
+    expect(commands, contains('bash tool/verify_minimum_sdk.sh "\$PROFILE"'));
     expect(File('tool/verify_minimum_sdk.sh').existsSync(), isTrue);
   });
 
